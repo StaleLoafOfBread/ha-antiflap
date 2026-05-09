@@ -36,6 +36,10 @@ The binary sensor is on while `input_entity` state matches `active_state`.
 after it turns on. It defaults to `0`, which disables the minimum-on timer and
 keeps the previous behavior.
 
+The Antiflap binary sensor also exposes an `entity_id` attribute. It contains
+the source `input_entity` plus any entity IDs from the source entity's own
+`entity_id` attribute, which lets Home Assistant show group-style source info.
+
 When `input_entity` changes from the active state to any other state, the
 integration calculates how long the request was active. If that duration is less
 than or equal to `short_flap_seconds`, it records a short flap timestamp. It

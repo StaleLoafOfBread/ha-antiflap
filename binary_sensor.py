@@ -31,7 +31,12 @@ from typing import Any
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import ATTR_DEVICE_CLASS, CONF_NAME, CONF_UNIQUE_ID
+from homeassistant.const import (
+    ATTR_DEVICE_CLASS,
+    ATTR_ENTITY_ID,
+    CONF_NAME,
+    CONF_UNIQUE_ID,
+)
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers.device import async_device_info_to_link_from_entity
 from homeassistant.helpers import entity_registry as er
@@ -321,6 +326,7 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
             ATTR_SHORT_FLAP_TIMESTAMPS: [
                 timestamp.isoformat() for timestamp in recent_short_flaps
             ],
+            ATTR_ENTITY_ID: self._entity_ids_attribute(),
             ATTR_INPUT_ENTITY: self._input_entity_id,
             ATTR_ACTIVE_STATE: self._active_state,
             ATTR_INPUT_STATE: self._input_state,
@@ -546,6 +552,27 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
             return False
 
         return state.state == self._active_state
+
+    def _entity_ids_attribute(self) -> list[str]:
+        """Return source entity IDs for Home Assistant group-style display."""
+        entity_ids = [self._input_entity_id]
+        state = self.hass.states.get(self._input_entity_id)
+
+        if state is None:
+            return entity_ids
+
+        source_entity_ids = state.attributes.get(ATTR_ENTITY_ID)
+
+        if isinstance(source_entity_ids, str):
+            entity_ids.append(source_entity_ids)
+        elif isinstance(source_entity_ids, list | tuple | set):
+            entity_ids.extend(
+                entity_id
+                for entity_id in source_entity_ids
+                if isinstance(entity_id, str)
+            )
+
+        return list(dict.fromkeys(entity_ids))
 
     @callback
     def _handle_input_entity_change(self, *args: Any) -> None:
