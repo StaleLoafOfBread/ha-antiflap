@@ -1,0 +1,7 @@
+reset:
+  name: Reset
+  description: Clear Antiflap runtime memory, including short flap history and any active hold.
+  target:
+    entity:
+      domain: binary_sensor
+      integration: antiflap

@@ -1,0 +1,13 @@
+{
+    "domain": "antiflap",
+    "name": "Antiflap",
+    "codeowners": [],
+    "config_flow": true,
+    "dependencies": [],
+    "documentation": "https://github.com/StaleLoafOfBread/ha-antiflap",
+    "issue_tracker": "https://github.com/StaleLoafOfBread/ha-antiflap/issues",
+    "integration_type": "helper",
+    "iot_class": "local_push",
+    "requirements": [],
+    "version": "0.0.3"
+}

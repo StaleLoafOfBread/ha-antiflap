@@ -1,0 +1,77 @@
+{
+    "title": "Antiflap",
+    "config": {
+        "step": {
+            "user": {
+                "title": "Set up Antiflap",
+                "description": "Create a binary sensor that resists short presence/request flapping by holding on longer after repeated short cycles.",
+                "data": {
+                    "input_entity": "Input entity",
+                    "active_state": "Active state",
+                    "free_flaps": "Free flaps",
+                    "short_flap_seconds": "Short flap seconds",
+                    "base_hold_seconds": "Base hold seconds",
+                    "hold_factor": "Hold factor",
+                    "max_hold_seconds": "Maximum hold seconds",
+                    "min_on_seconds": "Minimum on seconds",
+                    "window_seconds": "Memory window seconds"
+                },
+                "data_description": {
+                    "input_entity": "Entity to watch while the request should be active. For example: Office Motion.",
+                    "active_state": "Input entity state that means active. Defaults to on.",
+                    "free_flaps": "How many short flaps are ignored before adaptive hold begins. Most users will want to set this to at least 1.",
+                    "short_flap_seconds": "Presence/request cycles at or below this duration count as short flaps.",
+                    "base_hold_seconds": "The first hold duration after the free flaps are exceeded. Leave blank to use half of short flap seconds.",
+                    "hold_factor": "Multiplier used to grow each additional hold duration.",
+                    "max_hold_seconds": "Maximum hold duration.",
+                    "min_on_seconds": "Minimum time the Antiflap sensor must stay on after it turns on. Set to 0 to disable.",
+                    "window_seconds": "How long recent short flaps are remembered. Leave blank to use 1.5x maximum hold."
+                }
+            }
+        },
+        "error": {
+            "invalid_input_entity": "Select a valid entity.",
+            "active_state_required": "Enter the input state that means active.",
+            "max_less_than_base": "Maximum hold seconds must be greater than or equal to base hold seconds.",
+            "unknown": "Unexpected error"
+        },
+        "abort": {
+            "already_configured": "This Antiflap sensor is already configured."
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Antiflap options",
+                "data": {
+                    "input_entity": "Input entity",
+                    "active_state": "Active state",
+                    "free_flaps": "Free flaps",
+                    "short_flap_seconds": "Short flap seconds",
+                    "base_hold_seconds": "Base hold seconds",
+                    "hold_factor": "Hold factor",
+                    "max_hold_seconds": "Maximum hold seconds",
+                    "min_on_seconds": "Minimum on seconds",
+                    "window_seconds": "Memory window seconds"
+                },
+                "data_description": {
+                    "input_entity": "Entity to watch while the request should be active. For example: Office Motion.",
+                    "active_state": "Input entity state that means active. Defaults to on.",
+                    "free_flaps": "How many short flaps are ignored before adaptive hold begins.",
+                    "short_flap_seconds": "Presence/request cycles at or below this duration count as short flaps.",
+                    "base_hold_seconds": "The first hold duration after the free flaps are exceeded. Leave blank to use half of short flap seconds.",
+                    "hold_factor": "Multiplier used to grow each additional hold duration.",
+                    "max_hold_seconds": "Maximum hold duration.",
+                    "min_on_seconds": "Minimum time the Antiflap sensor must stay on after it turns on. Set to 0 to disable.",
+                    "window_seconds": "How long recent short flaps are remembered. Leave blank to use 1.5x maximum hold."
+                }
+            }
+        },
+        "error": {
+            "invalid_input_entity": "Select a valid entity.",
+            "active_state_required": "Enter the input state that means active.",
+            "max_less_than_base": "Maximum hold seconds must be greater than or equal to base hold seconds.",
+            "unknown": "Unexpected error"
+        }
+    }
+}
