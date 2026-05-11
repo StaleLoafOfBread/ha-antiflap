@@ -79,10 +79,10 @@ from .const import (
     CONF_WINDOW_SECONDS,
     DEFAULT_ACTIVE_STATE,
     DEFAULT_MIN_ON_SECONDS,
-    DEFAULT_WINDOW_MULTIPLIER,
     DOMAIN,
     SERVICE_RESET,
 )
+from .calculations import default_base_hold_seconds, default_window_seconds
 
 _LOGGER = logging.getLogger(__name__)
 _DEFAULT_REGISTRY_ASSIGNMENT_DELAY_SECONDS = 1
@@ -140,7 +140,8 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         # Use the config entry unique_id if available. If not, fall back to the
         # entry ID. Entity unique IDs are what let Home Assistant remember user
         # customizations like renamed entity IDs.
-        self._attr_unique_id = data.get(CONF_UNIQUE_ID) or entry.unique_id or entry.entry_id
+        self._attr_unique_id = data.get(
+            CONF_UNIQUE_ID) or entry.unique_id or entry.entry_id
 
         self._input_entity_id: str = data[CONF_INPUT_ENTITY]
         self._attr_device_info = async_device_info_to_link_from_entity(
@@ -148,13 +149,15 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
             self._input_entity_id,
         )
 
-        self._active_state: str = data.get(CONF_ACTIVE_STATE, DEFAULT_ACTIVE_STATE)
+        self._active_state: str = data.get(
+            CONF_ACTIVE_STATE, DEFAULT_ACTIVE_STATE)
 
         self._free_flaps: int = data[CONF_FREE_FLAPS]
         self._flap_gap_seconds: int = data[CONF_FLAP_GAP_SECONDS]
         base_hold_seconds = data.get(CONF_BASE_HOLD_SECONDS)
         if base_hold_seconds is None:
-            base_hold_seconds = _default_base_hold_seconds(self._flap_gap_seconds)
+            base_hold_seconds = default_base_hold_seconds(
+                self._flap_gap_seconds)
         self._base_hold_seconds: int = base_hold_seconds
         self._hold_factor: float = data[CONF_HOLD_FACTOR]
         self._max_hold_seconds: int = data[CONF_MAX_HOLD_SECONDS]
@@ -164,7 +167,13 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         )
         self._window_seconds: int = data.get(
             CONF_WINDOW_SECONDS,
-            _default_window_seconds(self._max_hold_seconds),
+            default_window_seconds(
+                self._free_flaps,
+                self._flap_gap_seconds,
+                self._base_hold_seconds,
+                self._hold_factor,
+                self._max_hold_seconds,
+            ),
         )
 
         # Runtime state -------------------------------------------------------
@@ -530,13 +539,15 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
             last_state.attributes.get(ATTR_FLAP_TIMESTAMPS, [])
         )
 
-        restored_active_started_at = last_state.attributes.get(ATTR_ACTIVE_STARTED_AT)
+        restored_active_started_at = last_state.attributes.get(
+            ATTR_ACTIVE_STARTED_AT)
         if isinstance(restored_active_started_at, str):
             parsed = dt_util.parse_datetime(restored_active_started_at)
             if parsed is not None:
                 self._active_started_at = _ensure_utc(parsed)
 
-        restored_inactive_started_at = last_state.attributes.get(ATTR_INACTIVE_STARTED_AT)
+        restored_inactive_started_at = last_state.attributes.get(
+            ATTR_INACTIVE_STARTED_AT)
         if isinstance(restored_inactive_started_at, str):
             parsed = dt_util.parse_datetime(restored_inactive_started_at)
             if parsed is not None:
@@ -620,7 +631,8 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         # it was within the flap gap and should count toward adaptive hold.
         if new_input_state:
             if self._inactive_started_at is not None:
-                duration_seconds = (now - self._inactive_started_at).total_seconds()
+                duration_seconds = (
+                    now - self._inactive_started_at).total_seconds()
 
                 if duration_seconds <= self._flap_gap_seconds:
                     self._flap_timestamps.append(now)
@@ -710,7 +722,8 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         self._purge_old_flap_timestamps()
 
         flap_timestamp_count = len(self._recent_flap_timestamps())
-        flap_count = self._flap_count_from_flap_timestamp_count(flap_timestamp_count)
+        flap_count = self._flap_count_from_flap_timestamp_count(
+            flap_timestamp_count)
         self._hold_seconds = self._hold_seconds_from_flap_count(flap_count)
 
         if self._hold_seconds > 0:
@@ -821,16 +834,6 @@ def _antiflap_name(name: str) -> str:
         return name
 
     return f"{name} Antiflap"
-
-
-def _default_window_seconds(max_hold_seconds: int) -> int:
-    """Return default rolling window based on max hold."""
-    return ceil(max_hold_seconds * DEFAULT_WINDOW_MULTIPLIER)
-
-
-def _default_base_hold_seconds(flap_gap_seconds: int) -> int:
-    """Return default base hold based on flap-gap duration."""
-    return max(ceil(flap_gap_seconds / 2), 1)
 
 
 def _parse_datetime_list(raw_values: Any) -> list[datetime]:

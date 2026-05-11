@@ -15,7 +15,6 @@ entry in binary_sensor.py.
 
 from __future__ import annotations
 
-from math import ceil
 from typing import Any
 
 import voluptuous as vol
@@ -44,24 +43,9 @@ from .const import (
     DEFAULT_MAX_HOLD_SECONDS,
     DEFAULT_MIN_ON_SECONDS,
     DEFAULT_FLAP_GAP_SECONDS,
-    DEFAULT_WINDOW_MULTIPLIER,
     DOMAIN,
 )
-
-
-def _default_window_seconds(max_hold_seconds: int) -> int:
-    """Return the default memory window for a given maximum hold.
-
-    We default the memory window to 1.5x the maximum hold. That means if the
-    maximum hold time is 15 minutes, Antiflap remembers flaps for 22.5
-    minutes unless the user overrides it.
-    """
-    return ceil(max_hold_seconds * DEFAULT_WINDOW_MULTIPLIER)
-
-
-def _default_base_hold_seconds(flap_gap_seconds: int) -> int:
-    """Return the default base hold as half the flap-gap duration."""
-    return max(ceil(flap_gap_seconds / 2), 1)
+from .calculations import default_base_hold_seconds
 
 
 def _current_data(config_entry: config_entries.ConfigEntry) -> dict[str, Any]:
@@ -83,24 +67,20 @@ def _build_schema(current: dict[str, Any] | None = None) -> vol.Schema:
     """
     current = current or {}
 
-    # window_seconds is intentionally optional. If the user leaves it blank, the
-    # entity derives it from max_hold_seconds at runtime.
-    window_key = vol.Optional(CONF_WINDOW_SECONDS)
-    if CONF_WINDOW_SECONDS in current:
-        window_key = vol.Optional(
-            CONF_WINDOW_SECONDS, default=current[CONF_WINDOW_SECONDS])
+    input_entity_key = vol.Required(CONF_INPUT_ENTITY)
+    if CONF_INPUT_ENTITY in current:
+        input_entity_key = vol.Required(
+            CONF_INPUT_ENTITY, default=current[CONF_INPUT_ENTITY])
 
-    # base_hold_seconds is intentionally optional. If the user leaves it blank,
-    # the entity derives it from flap_gap_seconds at runtime.
     base_hold_key = vol.Optional(CONF_BASE_HOLD_SECONDS)
     if CONF_BASE_HOLD_SECONDS in current:
         base_hold_key = vol.Optional(
             CONF_BASE_HOLD_SECONDS, default=current[CONF_BASE_HOLD_SECONDS])
 
-    input_entity_key = vol.Required(CONF_INPUT_ENTITY)
-    if CONF_INPUT_ENTITY in current:
-        input_entity_key = vol.Required(
-            CONF_INPUT_ENTITY, default=current[CONF_INPUT_ENTITY])
+    window_key = vol.Optional(CONF_WINDOW_SECONDS)
+    if CONF_WINDOW_SECONDS in current:
+        window_key = vol.Optional(
+            CONF_WINDOW_SECONDS, default=current[CONF_WINDOW_SECONDS])
 
     flap_gap_seconds = current.get(
         CONF_FLAP_GAP_SECONDS,
@@ -188,7 +168,7 @@ def _prepare_input(hass: HomeAssistant, user_input: dict[str, Any]) -> dict[str,
     flap_gap_seconds = user_input[CONF_FLAP_GAP_SECONDS]
     base = user_input.get(CONF_BASE_HOLD_SECONDS)
     if base is None:
-        base = _default_base_hold_seconds(flap_gap_seconds)
+        base = default_base_hold_seconds(flap_gap_seconds)
 
     max_hold = user_input[CONF_MAX_HOLD_SECONDS]
 
@@ -207,8 +187,8 @@ def _prepare_input(hass: HomeAssistant, user_input: dict[str, Any]) -> dict[str,
     return errors
 
 
-def _remove_derived_defaults(user_input: dict[str, Any]) -> None:
-    """Remove blank values that the entity can derive at runtime."""
+def _remove_blank_derived_values(user_input: dict[str, Any]) -> None:
+    """Remove blank override values so the entity derives them at runtime."""
     for key in (CONF_BASE_HOLD_SECONDS, CONF_WINDOW_SECONDS):
         if key in user_input and user_input[key] is None:
             user_input.pop(key)
@@ -230,7 +210,7 @@ class AntiflapConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors = _prepare_input(self.hass, user_input)
 
             if not errors:
-                _remove_derived_defaults(user_input)
+                _remove_blank_derived_values(user_input)
 
                 # This unique ID prevents accidentally creating the exact same
                 # helper twice for one input entity.
@@ -279,7 +259,7 @@ class AntiflapOptionsFlow(config_entries.OptionsFlow):
             errors = _prepare_input(self.hass, user_input)
 
             if not errors:
-                _remove_derived_defaults(user_input)
+                _remove_blank_derived_values(user_input)
 
                 return self.async_create_entry(title="", data=user_input)
 

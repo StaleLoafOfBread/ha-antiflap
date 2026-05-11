@@ -3,18 +3,20 @@
 Antiflap creates a Home Assistant binary sensor from an input entity and keeps
 that sensor on for an adaptive hold period after repeated short inactive gaps.
 
+The defaults are optimized for use with a motion sensor controlling whether or not a room's lights should be on or off.
+
 ## Example
 
 ```yaml
 input_entity: binary_sensor.office_motion
 active_state: "on"
 free_flaps: 0
-flap_gap_seconds: 60
+flap_gap_seconds: 120
 base_hold_seconds: 30
 hold_factor: 1.4
 max_hold_seconds: 600
 min_on_seconds: 0
-window_seconds: 900
+window_seconds: 540
 ```
 
 The Antiflap sensor name is the input entity's friendly name plus `Antiflap`.
@@ -59,8 +61,9 @@ If `hold_seconds` is greater than zero, the binary sensor stays on until
 `hold_until`. If `input_entity` becomes active again during that time, the sensor
 remains on because the request is active.
 
-`window_seconds` is optional in the UI. If omitted, it defaults to
-`ceil(max_hold_seconds * 1.5)`.
+`window_seconds` is optional in the UI. If omitted, Antiflap sizes it so the
+hold curve can reach `max_hold_seconds` when flaps happen every
+`flap_gap_seconds / 2`.
 
 `hold_until` shows when the active hold will end.
 
@@ -91,7 +94,7 @@ recent flap starts the hold sequence.
 
 ### `flap_gap_seconds`
 
-*Optional.* Defaults to `60` seconds.
+*Optional.* Defaults to `120` seconds.
 
 This is the maximum inactive gap that counts as a flap. Antiflap starts timing
 when `input_entity` leaves `active_state`. If the input returns to
@@ -104,7 +107,7 @@ seconds and then active again records one flap. An input that stays inactive for
 
 ### `base_hold_seconds`
 
-*Optional.* Defaults to half of `flap_gap_seconds` seconds, rounded up.
+*Optional.* Defaults to one quarter of `flap_gap_seconds` seconds, rounded up.
 
 This is the first hold duration once the number of recent flaps exceeds
 `free_flaps`. For example, if `base_hold_seconds` is `30`, the first counted
@@ -136,7 +139,8 @@ disable the minimum-on timer.
 
 ### `window_seconds`
 
-*Optional.* Defaults to `ceil(max_hold_seconds * 1.5)`.
+*Optional.* Defaults to a derived value based on the hold curve and
+`flap_gap_seconds`.
 
 This controls how long flap timestamps are remembered. Only flaps inside this
 rolling window are counted when Antiflap calculates the next hold.
