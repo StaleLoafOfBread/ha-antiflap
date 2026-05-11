@@ -17,7 +17,7 @@ The binary sensor is on when either:
        window, or
     3. the minimum-on timer has not expired yet.
 
-The hold window is based only on short presence/request flaps. There is no
+The hold window is based only on short inactive/request gaps. There is no
 separate tracked entity state; the input entity is the single source of truth for
 whether the request is currently active.
 """
@@ -53,14 +53,15 @@ from homeassistant.util import slugify
 from .const import (
     ATTR_BASE_HOLD_SECONDS,
     ATTR_ACTIVE_STATE,
+    ATTR_ACTIVE_STARTED_AT,
     ATTR_FREE_FLAPS,
     ATTR_HOLD_FACTOR,
     ATTR_HOLD_SECONDS,
     ATTR_HOLD_UNTIL,
+    ATTR_INACTIVE_STARTED_AT,
     ATTR_MAX_HOLD_SECONDS,
     ATTR_MIN_ON_SECONDS,
     ATTR_MIN_ON_UNTIL,
-    ATTR_PRESENCE_STARTED_AT,
     ATTR_INPUT_ENTITY,
     ATTR_INPUT_STATE,
     ATTR_SHORT_FLAP_SECONDS,
@@ -86,6 +87,7 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 _DEFAULT_REGISTRY_ASSIGNMENT_DELAY_SECONDS = 1
 _DEFAULT_REGISTRY_ASSIGNMENT_MAX_ATTEMPTS = 60
+_LEGACY_ATTR_PRESENCE_STARTED_AT = "presence_started_at"
 
 
 async def async_setup_entry(
@@ -173,12 +175,16 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
 
         # When input_entity became true. If the input is currently false, this
         # is None.
-        self._presence_started_at: datetime | None = None
+        self._active_started_at: datetime | None = None
 
-        # Each timestamp represents the END of one short presence/request flap.
+        # When input_entity became false. If the input is currently true, this
+        # is None.
+        self._inactive_started_at: datetime | None = None
+
+        # Each timestamp represents the END of one short inactive/request gap.
         # Example:
-        #   presence true at 12:00:00
-        #   presence false at 12:00:10
+        #   active false at 12:00:00
+        #   active true at 12:00:10
         #   short_flap_seconds = 60
         #   -> store timestamp 12:00:10
         self._short_flap_timestamps: list[datetime] = []
@@ -232,17 +238,20 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
 
         await self._restore_previous_runtime_state()
 
-        # Initialize presence state without counting a flap. We only count a
-        # short flap when presence changes from on to off after setup.
+        # Initialize active state without counting a flap. We only count a
+        # short flap when active changes from false to true after setup.
         self._input_state = self._read_input_state()
 
         if self._input_state:
-            if self._presence_started_at is None:
-                self._presence_started_at = _utcnow()
+            if self._active_started_at is None:
+                self._active_started_at = _utcnow()
+            self._inactive_started_at = None
             if self._min_on_until is None:
-                self._start_min_on_if_needed(self._presence_started_at)
+                self._start_min_on_if_needed(self._active_started_at)
         else:
-            self._presence_started_at = None
+            self._active_started_at = None
+            if self._inactive_started_at is None:
+                self._inactive_started_at = _utcnow()
 
         self._clear_expired_hold()
         self._clear_expired_min_on()
@@ -269,10 +278,10 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
 
         This is the main output of the integration:
 
-            presence is true
+            active is true
                 -> on
 
-            presence is false, but an unexpired hold window exists
+            active is false, but an unexpired hold window exists
                 -> on
 
             otherwise
@@ -318,7 +327,8 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
             ATTR_MAX_HOLD_SECONDS: self._max_hold_seconds,
             ATTR_MIN_ON_SECONDS: self._min_on_seconds,
             ATTR_MIN_ON_UNTIL: _datetime_to_iso(self._min_on_until),
-            ATTR_PRESENCE_STARTED_AT: _datetime_to_iso(self._presence_started_at),
+            ATTR_ACTIVE_STARTED_AT: _datetime_to_iso(self._active_started_at),
+            ATTR_INACTIVE_STARTED_AT: _datetime_to_iso(self._inactive_started_at),
             ATTR_SHORT_FLAP_SECONDS: self._short_flap_seconds,
 
             # These are stored as ISO strings so RestoreEntity can recover them
@@ -366,7 +376,8 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
 
         self._input_state = self._read_input_state()
         now = _utcnow()
-        self._presence_started_at = now if self._input_state else None
+        self._active_started_at = now if self._input_state else None
+        self._inactive_started_at = None if self._input_state else now
         if self._input_state:
             self._start_min_on_if_needed(now)
         else:
@@ -503,7 +514,8 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         Assistant restarted. We only restore values that represent actual memory:
 
             - short flap timestamps
-            - presence_started_at, if presence was true before restart
+            - active_started_at, if input was active before restart
+            - inactive_started_at, if input was inactive before restart
             - hold_until, if an old hold window may still be active
             - min_on_until, if an old minimum-on timer may still be active
 
@@ -518,11 +530,20 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
             last_state.attributes.get(ATTR_SHORT_FLAP_TIMESTAMPS, [])
         )
 
-        restored_presence_started_at = last_state.attributes.get(ATTR_PRESENCE_STARTED_AT)
-        if isinstance(restored_presence_started_at, str):
-            parsed = dt_util.parse_datetime(restored_presence_started_at)
+        restored_active_started_at = last_state.attributes.get(
+            ATTR_ACTIVE_STARTED_AT,
+            last_state.attributes.get(_LEGACY_ATTR_PRESENCE_STARTED_AT),
+        )
+        if isinstance(restored_active_started_at, str):
+            parsed = dt_util.parse_datetime(restored_active_started_at)
             if parsed is not None:
-                self._presence_started_at = _ensure_utc(parsed)
+                self._active_started_at = _ensure_utc(parsed)
+
+        restored_inactive_started_at = last_state.attributes.get(ATTR_INACTIVE_STARTED_AT)
+        if isinstance(restored_inactive_started_at, str):
+            parsed = dt_util.parse_datetime(restored_inactive_started_at)
+            if parsed is not None:
+                self._inactive_started_at = _ensure_utc(parsed)
 
         restored_hold_until = last_state.attributes.get(ATTR_HOLD_UNTIL)
         if isinstance(restored_hold_until, str):
@@ -583,11 +604,11 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
 
     @callback
     def _update_presence_state(self, new_input_state: bool) -> None:
-        """Update cached presence state and count short flaps.
+        """Update cached active state and count short flaps.
 
         This is the heart of the hold logic.
 
-        We count a short flap when presence goes true -> false quickly. The
+        We count a short flap when active goes false -> true quickly. The
         number of flaps that actually cause hold behavior is then:
 
             flap_count = max(short_flap_count - free_flaps, 0)
@@ -598,26 +619,27 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         if new_input_state == self._input_state:
             return
 
-        # Presence changed false -> true. Start a new request cycle. If an old
-        # hold timestamp is already expired, clear it now so attributes do not
-        # show a stale hold window while the request is active again.
+        # Active changed false -> true. The inactive gap ended; decide whether
+        # it was short enough to count toward adaptive hold behavior.
         if new_input_state:
-            self._presence_started_at = now
+            if self._inactive_started_at is not None:
+                duration_seconds = (now - self._inactive_started_at).total_seconds()
+
+                if duration_seconds <= self._short_flap_seconds:
+                    self._short_flap_timestamps.append(now)
+
+            self._active_started_at = now
+            self._inactive_started_at = None
             self._input_state = True
             self._clear_expired_hold(now)
             if not was_on:
                 self._start_min_on_if_needed(now)
             return
 
-        # Presence changed true -> false. The request ended; decide whether it
-        # was short enough to count toward adaptive hold behavior.
-        if self._presence_started_at is not None:
-            duration_seconds = (now - self._presence_started_at).total_seconds()
-
-            if duration_seconds <= self._short_flap_seconds:
-                self._short_flap_timestamps.append(now)
-
-        self._presence_started_at = None
+        # Active changed true -> false. Start a new inactive gap and calculate
+        # whether recent short gaps should keep the output on.
+        self._active_started_at = None
+        self._inactive_started_at = now
         self._input_state = False
         self._start_hold_if_needed(now)
         if not was_on and self.is_on:

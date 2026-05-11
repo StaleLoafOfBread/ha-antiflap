@@ -1,7 +1,7 @@
 # Antiflap
 
 Antiflap creates a Home Assistant binary sensor from an input entity and keeps
-that sensor on for an adaptive hold period after repeated short request flaps.
+that sensor on for an adaptive hold period after repeated short inactive gaps.
 
 The input entity is the
 single source of truth for whether the request is active.
@@ -41,10 +41,10 @@ the source `input_entity` plus any entity IDs from the source entity's own
 `entity_id` attribute, which lets Home Assistant show group-style source info.
 
 When `input_entity` changes from the active state to any other state, the
-integration calculates how long the request was active. If that duration is less
-than or equal to `short_flap_seconds`, it records a short flap timestamp. It
-then counts short flaps inside `window_seconds`, subtracts `free_flaps`, and
-calculates the hold:
+integration starts measuring an inactive gap. If `input_entity` returns to the
+active state within `short_flap_seconds`, it records a short flap timestamp.
+When `input_entity` next leaves the active state, Antiflap counts short flaps
+inside `window_seconds`, subtracts `free_flaps`, and calculates the hold:
 
 ```text
 flap_count = max(short_flap_count - free_flaps, 0)
@@ -59,7 +59,7 @@ else:
 ```
 
 If `hold_seconds` is greater than zero, the binary sensor stays on until
-`hold_until`. If `input_entity` becomes `on` again during that time, the sensor
+`hold_until`. If `input_entity` becomes active again during that time, the sensor
 remains on because the request is active.
 
 `window_seconds` is optional in the UI. If omitted, it defaults to

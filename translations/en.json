@@ -4,7 +4,7 @@
         "step": {
             "user": {
                 "title": "Set up Antiflap",
-                "description": "Create a binary sensor that resists short presence/request flapping by holding on longer after repeated short cycles.",
+                "description": "Create a binary sensor that resists short inactive/request gaps by holding on longer after repeated short gaps.",
                 "data": {
                     "input_entity": "Input entity",
                     "active_state": "Active state",
@@ -20,7 +20,7 @@
                     "input_entity": "Entity to watch while the request should be active. For example: Office Motion.",
                     "active_state": "Input entity state that means active. Defaults to on.",
                     "free_flaps": "How many short flaps are ignored before adaptive hold begins. Most users will want to set this to at least 1.",
-                    "short_flap_seconds": "Presence/request cycles at or below this duration count as short flaps.",
+                    "short_flap_seconds": "Inactive gaps at or below this duration count as short flaps when the input becomes active again.",
                     "base_hold_seconds": "The first hold duration after the free flaps are exceeded. Leave blank to use half of short flap seconds.",
                     "hold_factor": "Multiplier used to grow each additional hold duration.",
                     "max_hold_seconds": "Maximum hold duration.",
@@ -58,7 +58,7 @@
                     "input_entity": "Entity to watch while the request should be active. For example: Office Motion.",
                     "active_state": "Input entity state that means active. Defaults to on.",
                     "free_flaps": "How many short flaps are ignored before adaptive hold begins.",
-                    "short_flap_seconds": "Presence/request cycles at or below this duration count as short flaps.",
+                    "short_flap_seconds": "Inactive gaps at or below this duration count as short flaps when the input becomes active again.",
                     "base_hold_seconds": "The first hold duration after the free flaps are exceeded. Leave blank to use half of short flap seconds.",
                     "hold_factor": "Multiplier used to grow each additional hold duration.",
                     "max_hold_seconds": "Maximum hold duration.",
