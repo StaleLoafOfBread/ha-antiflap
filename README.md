@@ -29,7 +29,8 @@ binary_sensor.office_motion_antiflap
 ## Behavior
 
 The binary sensor is on while `input_entity` state matches `active_state`.
-`active_state` defaults to `on`.
+If `active_state` is left blank, Antiflap chooses a default based on the input
+entity type.
 
 `min_on_seconds` controls the minimum time the Antiflap binary sensor remains on
 after it turns on. It defaults to `0`, which disables the minimum-on timer and
@@ -77,11 +78,13 @@ The entity Antiflap watches.
 
 ### `active_state`
 
-*Optional.* Defaults to `on`.
+*Optional.* Leave blank to choose a default based on the input entity type.
 
 This is the exact input entity state string that means the request is active.
 For a normal binary sensor this is usually `on`. For another entity type, it
 could be another state such as `heat`, `cool`, or `open`.
+The current default mapping is in
+[`DEFAULT_ACTIVE_STATE_BY_DOMAIN`](https://github.com/StaleLoafOfBread/ha-antiflap/blob/main/active_state.py).
 
 ### `free_flaps`
 

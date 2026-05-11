@@ -37,7 +37,6 @@ from .const import (
     CONF_MIN_ON_SECONDS,
     CONF_FLAP_GAP_SECONDS,
     CONF_WINDOW_SECONDS,
-    DEFAULT_ACTIVE_STATE,
     DEFAULT_FREE_FLAPS,
     DEFAULT_HOLD_FACTOR,
     DEFAULT_MAX_HOLD_SECONDS,
@@ -94,9 +93,9 @@ def _build_schema(current: dict[str, Any] | None = None) -> vol.Schema:
         {
             input_entity_key: selector.EntitySelector(),
 
-            vol.Required(
+            vol.Optional(
                 CONF_ACTIVE_STATE,
-                default=current.get(CONF_ACTIVE_STATE, DEFAULT_ACTIVE_STATE),
+                default=current.get(CONF_ACTIVE_STATE, ""),
             ): selector.TextSelector(),
 
             vol.Required(SECTION_FLAP_DETECTION): section(
@@ -198,11 +197,17 @@ def _prepare_input(hass: HomeAssistant, user_input: dict[str, Any]) -> dict[str,
     """
     errors: dict[str, str] = {}
 
-    active_state = user_input.get(CONF_ACTIVE_STATE, DEFAULT_ACTIVE_STATE)
-    if not isinstance(active_state, str) or not active_state.strip():
-        errors[CONF_ACTIVE_STATE] = "active_state_required"
-    else:
+    entity_id = user_input[CONF_INPUT_ENTITY]
+    try:
+        cv.entity_id(entity_id)
+    except vol.Invalid:
+        errors[CONF_INPUT_ENTITY] = "invalid_input_entity"
+
+    active_state = user_input.get(CONF_ACTIVE_STATE)
+    if isinstance(active_state, str) and active_state.strip():
         user_input[CONF_ACTIVE_STATE] = active_state.strip()
+    else:
+        user_input[CONF_ACTIVE_STATE] = ""
 
     flap_gap_seconds = user_input[CONF_FLAP_GAP_SECONDS]
     base = user_input.get(CONF_BASE_HOLD_SECONDS)
@@ -213,12 +218,6 @@ def _prepare_input(hass: HomeAssistant, user_input: dict[str, Any]) -> dict[str,
 
     if max_hold < base:
         errors[CONF_MAX_HOLD_SECONDS] = "max_less_than_base"
-
-    entity_id = user_input[CONF_INPUT_ENTITY]
-    try:
-        cv.entity_id(entity_id)
-    except vol.Invalid:
-        errors[CONF_INPUT_ENTITY] = "invalid_input_entity"
 
     if not errors:
         user_input[CONF_NAME] = _antiflap_name(_input_entity_name(hass, entity_id))

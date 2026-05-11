@@ -77,11 +77,11 @@ from .const import (
     CONF_MIN_ON_SECONDS,
     CONF_FLAP_GAP_SECONDS,
     CONF_WINDOW_SECONDS,
-    DEFAULT_ACTIVE_STATE,
     DEFAULT_MIN_ON_SECONDS,
     DOMAIN,
     SERVICE_RESET,
 )
+from .active_state import default_active_state
 from .calculations import default_base_hold_seconds, default_window_seconds
 
 _LOGGER = logging.getLogger(__name__)
@@ -149,8 +149,14 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
             self._input_entity_id,
         )
 
-        self._active_state: str = data.get(
-            CONF_ACTIVE_STATE, DEFAULT_ACTIVE_STATE)
+        configured_active_state = data.get(CONF_ACTIVE_STATE)
+        if (
+            isinstance(configured_active_state, str)
+            and configured_active_state.strip()
+        ):
+            self._active_state = configured_active_state.strip()
+        else:
+            self._active_state = default_active_state(hass, self._input_entity_id)
 
         self._free_flaps: int = data[CONF_FREE_FLAPS]
         self._flap_gap_seconds: int = data[CONF_FLAP_GAP_SECONDS]
