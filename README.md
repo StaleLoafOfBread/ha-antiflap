@@ -3,21 +3,18 @@
 Antiflap creates a Home Assistant binary sensor from an input entity and keeps
 that sensor on for an adaptive hold period after repeated short inactive gaps.
 
-The input entity is the
-single source of truth for whether the request is active.
-
 ## Example
 
 ```yaml
 input_entity: binary_sensor.office_motion
 active_state: "on"
-free_flaps: 1
+free_flaps: 0
 flap_gap_seconds: 60
 base_hold_seconds: 30
 hold_factor: 1.4
-max_hold_seconds: 900
+max_hold_seconds: 600
 min_on_seconds: 0
-window_seconds: 1350
+window_seconds: 900
 ```
 
 The Antiflap sensor name is the input entity's friendly name plus `Antiflap`.
@@ -66,6 +63,83 @@ remains on because the request is active.
 `ceil(max_hold_seconds * 1.5)`.
 
 `hold_until` shows when the active hold will end.
+
+## Configuration
+
+### `input_entity`
+
+*Required.*
+
+The entity Antiflap watches.
+
+### `active_state`
+
+*Optional.* Defaults to `on`.
+
+This is the exact input entity state string that means the request is active.
+For a normal binary sensor this is usually `on`. For another entity type, it
+could be another state such as `heat`, `cool`, or `open`.
+
+### `free_flaps`
+
+*Optional.* Defaults to `0`.
+
+This is how many recent flaps are ignored before Antiflap starts applying an
+adaptive hold. With `free_flaps: 0`, the first flap inside the memory window can
+create a hold. With `free_flaps: 1`, the first flap is ignored and the second
+recent flap starts the hold sequence.
+
+### `flap_gap_seconds`
+
+*Optional.* Defaults to `60` seconds.
+
+This is the maximum inactive gap that counts as a flap. Antiflap starts timing
+when `input_entity` leaves `active_state`. If the input returns to
+`active_state` within this many seconds, that inactive gap is recorded as one
+flap.
+
+For example, with `flap_gap_seconds: 60`, an input that turns inactive for 45
+seconds and then active again records one flap. An input that stays inactive for
+90 seconds does not record a flap.
+
+### `base_hold_seconds`
+
+*Optional.* Defaults to half of `flap_gap_seconds` seconds, rounded up.
+
+This is the first hold duration once the number of recent flaps exceeds
+`free_flaps`. For example, if `base_hold_seconds` is `30`, the first counted
+flap holds the output on for 30 seconds after the input becomes inactive.
+
+### `hold_factor`
+
+*Optional.* Defaults to `1.4`.
+
+This multiplier grows the hold duration as more flaps happen inside the memory
+window. A value of `1.0` keeps every counted hold at `base_hold_seconds`. Values
+above `1.0` increase each later hold until `max_hold_seconds` is reached.
+
+### `max_hold_seconds`
+
+*Optional.* Defaults to `600` seconds.
+
+This caps the adaptive hold duration. No calculated hold will be longer than
+this value.
+
+### `min_on_seconds`
+
+*Optional.* Defaults to `0` seconds.
+
+This is a separate minimum-on timer for the Antiflap output binary sensor. When
+set above `0`, the output remains on for at least this many seconds after it
+turns on, even if the input becomes inactive immediately. Set it to `0` to
+disable the minimum-on timer.
+
+### `window_seconds`
+
+*Optional.* Defaults to `ceil(max_hold_seconds * 1.5)`.
+
+This controls how long flap timestamps are remembered. Only flaps inside this
+rolling window are counted when Antiflap calculates the next hold.
 
 ## Service
 
