@@ -34,13 +34,14 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     ATTR_DEVICE_CLASS,
     ATTR_ENTITY_ID,
+    CONF_DEVICE_ID,
     CONF_NAME,
     CONF_UNIQUE_ID,
 )
 from homeassistant.core import Event, HomeAssistant, callback
-from homeassistant.helpers.device import async_device_info_to_link_from_entity
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers import entity_platform
 from homeassistant.helpers.event import (
     async_call_later,
@@ -92,7 +93,7 @@ _DEFAULT_REGISTRY_ASSIGNMENT_MAX_ATTEMPTS = 60
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up one Antiflap binary sensor from a config entry.
 
@@ -144,10 +145,8 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
             CONF_UNIQUE_ID) or entry.unique_id or entry.entry_id
 
         self._input_entity_id: str = data[CONF_INPUT_ENTITY]
-        self._attr_device_info = async_device_info_to_link_from_entity(
-            hass,
-            self._input_entity_id,
-        )
+        if (device_id := data.get(CONF_DEVICE_ID)) is not None:
+            self.device_entry = dr.async_get(hass).async_get(device_id)
 
         configured_active_state = data.get(CONF_ACTIVE_STATE)
         if (
@@ -476,21 +475,19 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
             )
             return False
 
-        input_device_id = input_entity_entry.device_id
         input_entity_category = input_entity_entry.entity_category
 
         # area_id on the entity registry entry is an explicit entity area
         # assignment. Do not copy area inherited from the input entity's device,
-        # because this helper should only attach metadata to its own entity.
+        # and do not attach this helper to the input entity's device.
         input_area_id = input_entity_entry.area_id
 
         if (
-            input_device_id is None
-            and input_area_id is None
+            input_area_id is None
             and entity_entry.entity_category == input_entity_category
         ):
             _LOGGER.debug(
-                "Input entity %s has no device, explicit area, or category metadata "
+                "Input entity %s has no explicit area or category metadata "
                 "to copy to %s",
                 self._input_entity_id,
                 entity_id,
@@ -498,9 +495,6 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
             return False
 
         updates: dict[str, Any] = {}
-
-        if input_device_id is not None and entity_entry.device_id != input_device_id:
-            updates["device_id"] = input_device_id
 
         if input_area_id is not None and entity_entry.area_id != input_area_id:
             updates["area_id"] = input_area_id

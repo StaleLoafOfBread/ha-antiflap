@@ -11,13 +11,13 @@ loaded.
 from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
+from homeassistant.const import CONF_DEVICE_ID, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device import (
-    async_remove_stale_devices_links_keep_entity_device,
+    async_remove_stale_devices_links_keep_current_device,
 )
 
-from .const import CONF_INPUT_ENTITY, DOMAIN
+from .const import DOMAIN
 
 PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR]
 
@@ -32,11 +32,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Store any future shared integration data here if we need it.
     hass.data.setdefault(DOMAIN, {})
 
-    input_entity_id = entry.options.get(CONF_INPUT_ENTITY, entry.data[CONF_INPUT_ENTITY])
-    async_remove_stale_devices_links_keep_entity_device(
+    async_remove_stale_devices_links_keep_current_device(
         hass,
         entry.entry_id,
-        input_entity_id,
+        entry.options.get(CONF_DEVICE_ID, entry.data.get(CONF_DEVICE_ID)),
     )
 
     # If the user changes options later, reload this entry so the entity uses

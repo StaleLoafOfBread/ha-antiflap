@@ -20,9 +20,15 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.const import ATTR_FRIENDLY_NAME, CONF_NAME, CONF_UNIQUE_ID
+from homeassistant.const import (
+    ATTR_FRIENDLY_NAME,
+    CONF_DEVICE_ID,
+    CONF_NAME,
+    CONF_UNIQUE_ID,
+)
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult, section
+from homeassistant.helpers.device import async_entity_id_to_device_id
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import selector
 from homeassistant.util import slugify
@@ -202,6 +208,8 @@ def _prepare_input(hass: HomeAssistant, user_input: dict[str, Any]) -> dict[str,
         cv.entity_id(entity_id)
     except vol.Invalid:
         errors[CONF_INPUT_ENTITY] = "invalid_input_entity"
+    else:
+        user_input[CONF_DEVICE_ID] = async_entity_id_to_device_id(hass, entity_id)
 
     active_state = user_input.get(CONF_ACTIVE_STATE)
     if isinstance(active_state, str) and active_state.strip():
@@ -220,7 +228,8 @@ def _prepare_input(hass: HomeAssistant, user_input: dict[str, Any]) -> dict[str,
         errors[CONF_MAX_HOLD_SECONDS] = "max_less_than_base"
 
     if not errors:
-        user_input[CONF_NAME] = _antiflap_name(_input_entity_name(hass, entity_id))
+        user_input[CONF_NAME] = _antiflap_name(
+            _input_entity_name(hass, entity_id))
 
     return errors
 
@@ -253,7 +262,8 @@ class AntiflapConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
                 # This unique ID prevents accidentally creating the exact same
                 # helper twice for one input entity.
-                unique_id = slugify(f"{DOMAIN}_{user_input[CONF_INPUT_ENTITY]}")
+                unique_id = slugify(
+                    f"{DOMAIN}_{user_input[CONF_INPUT_ENTITY]}")
                 await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_configured()
 
@@ -261,13 +271,15 @@ class AntiflapConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
                 return self.async_create_entry(
                     title=user_input[CONF_NAME],
-                    data=user_input,
+                    data={},
+                    options=user_input,
                 )
 
         return self.async_show_form(
             step_id="user",
             data_schema=_build_schema(user_input),
             errors=errors,
+            last_step=True,
         )
 
     @staticmethod
@@ -308,4 +320,5 @@ class AntiflapOptionsFlow(config_entries.OptionsFlow):
             data_schema=_build_schema(
                 current if user_input is None else user_input),
             errors=errors,
+            last_step=True,
         )
