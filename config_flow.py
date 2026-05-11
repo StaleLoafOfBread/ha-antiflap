@@ -22,7 +22,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import ATTR_FRIENDLY_NAME, CONF_NAME, CONF_UNIQUE_ID
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.data_entry_flow import FlowResult
+from homeassistant.data_entry_flow import FlowResult, section
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import selector
 from homeassistant.util import slugify
@@ -46,6 +46,9 @@ from .const import (
     DOMAIN,
 )
 from .calculations import default_base_hold_seconds
+
+SECTION_FLAP_DETECTION = "flap_detection"
+SECTION_HOLD_BEHAVIOR = "hold_behavior"
 
 
 def _current_data(config_entry: config_entries.ConfigEntry) -> dict[str, Any]:
@@ -96,38 +99,74 @@ def _build_schema(current: dict[str, Any] | None = None) -> vol.Schema:
                 default=current.get(CONF_ACTIVE_STATE, DEFAULT_ACTIVE_STATE),
             ): selector.TextSelector(),
 
-            vol.Required(
-                CONF_FREE_FLAPS,
-                default=current.get(CONF_FREE_FLAPS, DEFAULT_FREE_FLAPS),
-            ): vol.All(vol.Coerce(int), vol.Range(min=0)),
+            vol.Required(SECTION_FLAP_DETECTION): section(
+                vol.Schema(
+                    {
+                        vol.Required(
+                            CONF_FREE_FLAPS,
+                            default=current.get(
+                                CONF_FREE_FLAPS,
+                                DEFAULT_FREE_FLAPS,
+                            ),
+                        ): vol.All(vol.Coerce(int), vol.Range(min=0)),
 
-            vol.Required(
-                CONF_FLAP_GAP_SECONDS,
-                default=flap_gap_seconds,
-            ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+                        vol.Required(
+                            CONF_FLAP_GAP_SECONDS,
+                            default=flap_gap_seconds,
+                        ): vol.All(vol.Coerce(int), vol.Range(min=1)),
 
-            base_hold_key: vol.All(vol.Coerce(int), vol.Range(min=1)),
+                        window_key: vol.All(vol.Coerce(int), vol.Range(min=1)),
+                    }
+                ),
+                {"collapsed": True},
+            ),
 
-            vol.Required(
-                CONF_HOLD_FACTOR,
-                default=current.get(CONF_HOLD_FACTOR, DEFAULT_HOLD_FACTOR),
-            ): vol.All(vol.Coerce(float), vol.Range(min=1.0)),
+            vol.Required(SECTION_HOLD_BEHAVIOR): section(
+                vol.Schema(
+                    {
+                        base_hold_key: vol.All(vol.Coerce(int), vol.Range(min=1)),
 
-            vol.Required(
-                CONF_MAX_HOLD_SECONDS,
-                default=current.get(CONF_MAX_HOLD_SECONDS,
-                                    DEFAULT_MAX_HOLD_SECONDS),
-            ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+                        vol.Required(
+                            CONF_HOLD_FACTOR,
+                            default=current.get(
+                                CONF_HOLD_FACTOR,
+                                DEFAULT_HOLD_FACTOR,
+                            ),
+                        ): vol.All(vol.Coerce(float), vol.Range(min=1.0)),
 
-            vol.Required(
-                CONF_MIN_ON_SECONDS,
-                default=current.get(CONF_MIN_ON_SECONDS,
-                                    DEFAULT_MIN_ON_SECONDS),
-            ): vol.All(vol.Coerce(int), vol.Range(min=0)),
+                        vol.Required(
+                            CONF_MAX_HOLD_SECONDS,
+                            default=current.get(
+                                CONF_MAX_HOLD_SECONDS,
+                                DEFAULT_MAX_HOLD_SECONDS,
+                            ),
+                        ): vol.All(vol.Coerce(int), vol.Range(min=1)),
 
-            window_key: vol.All(vol.Coerce(int), vol.Range(min=1)),
+                        vol.Required(
+                            CONF_MIN_ON_SECONDS,
+                            default=current.get(
+                                CONF_MIN_ON_SECONDS,
+                                DEFAULT_MIN_ON_SECONDS,
+                            ),
+                        ): vol.All(vol.Coerce(int), vol.Range(min=0)),
+                    }
+                ),
+                {"collapsed": True},
+            ),
         }
     )
+
+
+def _flatten_sections(user_input: dict[str, Any]) -> dict[str, Any]:
+    """Return submitted form values as flat config-entry data."""
+    flattened = dict(user_input)
+
+    for section_key in (SECTION_FLAP_DETECTION, SECTION_HOLD_BEHAVIOR):
+        section_input = flattened.pop(section_key, {})
+        if isinstance(section_input, dict):
+            flattened.update(section_input)
+
+    return flattened
 
 
 def _input_entity_name(hass: HomeAssistant, entity_id: str) -> str:
@@ -207,6 +246,7 @@ class AntiflapConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            user_input = _flatten_sections(user_input)
             errors = _prepare_input(self.hass, user_input)
 
             if not errors:
@@ -256,6 +296,7 @@ class AntiflapOptionsFlow(config_entries.OptionsFlow):
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            user_input = _flatten_sections(user_input)
             errors = _prepare_input(self.hass, user_input)
 
             if not errors:
