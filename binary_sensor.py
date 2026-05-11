@@ -4,7 +4,7 @@ This file creates the actual entity exposed to Home Assistant.
 
 The output entity is a binary sensor. It answers one question:
 
-    Should the request/presence condition be treated as active right now?
+    Should the request condition be treated as active right now?
 
 For an office motion example:
 
@@ -64,8 +64,8 @@ from .const import (
     ATTR_MIN_ON_UNTIL,
     ATTR_INPUT_ENTITY,
     ATTR_INPUT_STATE,
-    ATTR_SHORT_FLAP_SECONDS,
-    ATTR_SHORT_FLAP_TIMESTAMPS,
+    ATTR_FLAP_GAP_SECONDS,
+    ATTR_FLAP_TIMESTAMPS,
     ATTR_TOTAL_FLAPS,
     ATTR_WINDOW_SECONDS,
     CONF_BASE_HOLD_SECONDS,
@@ -75,7 +75,7 @@ from .const import (
     CONF_INPUT_ENTITY,
     CONF_MAX_HOLD_SECONDS,
     CONF_MIN_ON_SECONDS,
-    CONF_SHORT_FLAP_SECONDS,
+    CONF_FLAP_GAP_SECONDS,
     CONF_WINDOW_SECONDS,
     DEFAULT_ACTIVE_STATE,
     DEFAULT_MIN_ON_SECONDS,
@@ -87,7 +87,6 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 _DEFAULT_REGISTRY_ASSIGNMENT_DELAY_SECONDS = 1
 _DEFAULT_REGISTRY_ASSIGNMENT_MAX_ATTEMPTS = 60
-_LEGACY_ATTR_PRESENCE_STARTED_AT = "presence_started_at"
 
 
 async def async_setup_entry(
@@ -114,7 +113,7 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
 
     RestoreEntity:
         Lets this object restore its previous attributes after Home Assistant
-        restarts. We use that to restore recent short-flap timestamps and an
+        restarts. We use that to restore recent flap timestamps and an
         unexpired hold window.
     """
 
@@ -152,10 +151,10 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         self._active_state: str = data.get(CONF_ACTIVE_STATE, DEFAULT_ACTIVE_STATE)
 
         self._free_flaps: int = data[CONF_FREE_FLAPS]
-        self._short_flap_seconds: int = data[CONF_SHORT_FLAP_SECONDS]
+        self._flap_gap_seconds: int = data[CONF_FLAP_GAP_SECONDS]
         base_hold_seconds = data.get(CONF_BASE_HOLD_SECONDS)
         if base_hold_seconds is None:
-            base_hold_seconds = _default_base_hold_seconds(self._short_flap_seconds)
+            base_hold_seconds = _default_base_hold_seconds(self._flap_gap_seconds)
         self._base_hold_seconds: int = base_hold_seconds
         self._hold_factor: float = data[CONF_HOLD_FACTOR]
         self._max_hold_seconds: int = data[CONF_MAX_HOLD_SECONDS]
@@ -181,13 +180,14 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         # is None.
         self._inactive_started_at: datetime | None = None
 
-        # Each timestamp represents the END of one short inactive/request gap.
+        # Each timestamp represents the END of one inactive/request gap that
+        # was short enough to count as a flap.
         # Example:
         #   active false at 12:00:00
         #   active true at 12:00:10
-        #   short_flap_seconds = 60
+        #   flap_gap_seconds = 60
         #   -> store timestamp 12:00:10
-        self._short_flap_timestamps: list[datetime] = []
+        self._flap_timestamps: list[datetime] = []
 
         # If set, the binary sensor remains on until this UTC timestamp unless
         # input_entity turns on again. It is stored directly so restart
@@ -205,7 +205,7 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
 
         # Cancel function for our scheduled update callback.
         # We use this to wake the entity when a hold expires, a minimum-on
-        # timer expires, or an old short-flap timestamp falls out of the
+        # timer expires, or an old flap timestamp falls out of the
         # rolling window.
         self._cancel_update_timer = None
         self._cancel_default_registry_assignment = None
@@ -239,7 +239,7 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         await self._restore_previous_runtime_state()
 
         # Initialize active state without counting a flap. We only count a
-        # short flap when active changes from false to true after setup.
+        # flap when active changes from false to true after setup.
         self._input_state = self._read_input_state()
 
         if self._input_state:
@@ -255,7 +255,7 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
 
         self._clear_expired_hold()
         self._clear_expired_min_on()
-        self._purge_old_short_flap_timestamps()
+        self._purge_old_flap_timestamps()
 
         state_tracker = async_track_state_change_event(
             self.hass,
@@ -315,8 +315,8 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         These are intentionally verbose so you can debug why the binary sensor is
         on or off without reading logs.
         """
-        recent_short_flaps = self._recent_short_flap_timestamps()
-        total_flaps = len(recent_short_flaps)
+        recent_flaps = self._recent_flap_timestamps()
+        total_flaps = len(recent_flaps)
 
         return {
             ATTR_BASE_HOLD_SECONDS: self._base_hold_seconds,
@@ -329,12 +329,12 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
             ATTR_MIN_ON_UNTIL: _datetime_to_iso(self._min_on_until),
             ATTR_ACTIVE_STARTED_AT: _datetime_to_iso(self._active_started_at),
             ATTR_INACTIVE_STARTED_AT: _datetime_to_iso(self._inactive_started_at),
-            ATTR_SHORT_FLAP_SECONDS: self._short_flap_seconds,
+            ATTR_FLAP_GAP_SECONDS: self._flap_gap_seconds,
 
             # These are stored as ISO strings so RestoreEntity can recover them
             # after restart. Home Assistant attributes must be JSON-friendly.
-            ATTR_SHORT_FLAP_TIMESTAMPS: [
-                timestamp.isoformat() for timestamp in recent_short_flaps
+            ATTR_FLAP_TIMESTAMPS: [
+                timestamp.isoformat() for timestamp in recent_flaps
             ],
             ATTR_ENTITY_ID: self._entity_ids_attribute(),
             ATTR_INPUT_ENTITY: self._input_entity_id,
@@ -370,7 +370,7 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
 
     async def async_reset(self) -> None:
         """Clear runtime flap memory and any active hold."""
-        self._short_flap_timestamps = []
+        self._flap_timestamps = []
         self._hold_until = None
         self._hold_seconds = 0
 
@@ -513,7 +513,7 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         RestoreEntity gives us the last state this entity had before Home
         Assistant restarted. We only restore values that represent actual memory:
 
-            - short flap timestamps
+            - flap timestamps
             - active_started_at, if input was active before restart
             - inactive_started_at, if input was inactive before restart
             - hold_until, if an old hold window may still be active
@@ -526,14 +526,11 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         if last_state is None:
             return
 
-        self._short_flap_timestamps = _parse_datetime_list(
-            last_state.attributes.get(ATTR_SHORT_FLAP_TIMESTAMPS, [])
+        self._flap_timestamps = _parse_datetime_list(
+            last_state.attributes.get(ATTR_FLAP_TIMESTAMPS, [])
         )
 
-        restored_active_started_at = last_state.attributes.get(
-            ATTR_ACTIVE_STARTED_AT,
-            last_state.attributes.get(_LEGACY_ATTR_PRESENCE_STARTED_AT),
-        )
+        restored_active_started_at = last_state.attributes.get(ATTR_ACTIVE_STARTED_AT)
         if isinstance(restored_active_started_at, str):
             parsed = dt_util.parse_datetime(restored_active_started_at)
             if parsed is not None:
@@ -599,19 +596,19 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
     def _handle_input_entity_change(self, *args: Any) -> None:
         """Handle changes in the input entity state."""
         new_input_state = self._read_input_state()
-        self._update_presence_state(new_input_state)
+        self._update_active_state(new_input_state)
         self._recalculate_and_write_state()
 
     @callback
-    def _update_presence_state(self, new_input_state: bool) -> None:
-        """Update cached active state and count short flaps.
+    def _update_active_state(self, new_input_state: bool) -> None:
+        """Update cached active state and count flaps.
 
         This is the heart of the hold logic.
 
-        We count a short flap when active goes false -> true quickly. The
+        We count a flap when active goes false -> true quickly. The
         number of flaps that actually cause hold behavior is then:
 
-            flap_count = max(short_flap_count - free_flaps, 0)
+            flap_count = max(flap_timestamp_count - free_flaps, 0)
         """
         now = _utcnow()
         was_on = self.is_on
@@ -620,13 +617,13 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
             return
 
         # Active changed false -> true. The inactive gap ended; decide whether
-        # it was short enough to count toward adaptive hold behavior.
+        # it was within the flap gap and should count toward adaptive hold.
         if new_input_state:
             if self._inactive_started_at is not None:
                 duration_seconds = (now - self._inactive_started_at).total_seconds()
 
-                if duration_seconds <= self._short_flap_seconds:
-                    self._short_flap_timestamps.append(now)
+                if duration_seconds <= self._flap_gap_seconds:
+                    self._flap_timestamps.append(now)
 
             self._active_started_at = now
             self._inactive_started_at = None
@@ -637,7 +634,7 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
             return
 
         # Active changed true -> false. Start a new inactive gap and calculate
-        # whether recent short gaps should keep the output on.
+        # whether recent flap gaps should keep the output on.
         self._active_started_at = None
         self._inactive_started_at = now
         self._input_state = False
@@ -653,7 +650,7 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
 
             - the current hold window expires
             - the current minimum-on timer expires
-            - an old short-flap timestamp falls out of the rolling window
+            - an old flap timestamp falls out of the rolling window
 
         If hold expires while input_entity is still off, this callback is
         what turns the binary sensor off. If input_entity is on, is_on stays
@@ -668,7 +665,7 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         """Clean old data, reschedule timers, and tell HA state changed."""
         self._clear_expired_hold()
         self._clear_expired_min_on()
-        self._purge_old_short_flap_timestamps()
+        self._purge_old_flap_timestamps()
         self._schedule_next_update()
         self.async_write_ha_state()
 
@@ -693,7 +690,7 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         if remaining_min_on > 0:
             delays.append(remaining_min_on)
 
-        seconds_until_window_expiry = self._seconds_until_next_short_flap_expires()
+        seconds_until_window_expiry = self._seconds_until_next_flap_expires()
         if seconds_until_window_expiry is not None:
             delays.append(seconds_until_window_expiry)
 
@@ -709,11 +706,11 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         self.async_on_remove(self._cancel_update_timer)
 
     def _start_hold_if_needed(self, now: datetime) -> None:
-        """Calculate and store a new hold window after presence turns false."""
-        self._purge_old_short_flap_timestamps()
+        """Calculate and store a new hold window after active turns false."""
+        self._purge_old_flap_timestamps()
 
-        short_flap_count = len(self._recent_short_flap_timestamps())
-        flap_count = self._flap_count_from_short_flap_count(short_flap_count)
+        flap_timestamp_count = len(self._recent_flap_timestamps())
+        flap_count = self._flap_count_from_flap_timestamp_count(flap_timestamp_count)
         self._hold_seconds = self._hold_seconds_from_flap_count(flap_count)
 
         if self._hold_seconds > 0:
@@ -721,20 +718,20 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         else:
             self._hold_until = None
 
-    def _recent_short_flap_timestamps(self) -> list[datetime]:
-        """Return short-flap timestamps still inside the rolling window."""
+    def _recent_flap_timestamps(self) -> list[datetime]:
+        """Return flap timestamps still inside the rolling window."""
         cutoff = _utcnow() - timedelta(seconds=self._window_seconds)
         return [
-            timestamp for timestamp in self._short_flap_timestamps if timestamp >= cutoff
+            timestamp for timestamp in self._flap_timestamps if timestamp >= cutoff
         ]
 
-    def _purge_old_short_flap_timestamps(self) -> None:
-        """Drop short-flap timestamps outside the rolling window."""
-        self._short_flap_timestamps = self._recent_short_flap_timestamps()
+    def _purge_old_flap_timestamps(self) -> None:
+        """Drop flap timestamps outside the rolling window."""
+        self._flap_timestamps = self._recent_flap_timestamps()
 
-    def _seconds_until_next_short_flap_expires(self) -> int | None:
-        """Return seconds until the oldest short flap timestamp expires."""
-        recent = self._recent_short_flap_timestamps()
+    def _seconds_until_next_flap_expires(self) -> int | None:
+        """Return seconds until the oldest flap timestamp expires."""
+        recent = self._recent_flap_timestamps()
 
         if not recent:
             return None
@@ -748,16 +745,16 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
 
         return seconds
 
-    def _flap_count_from_short_flap_count(self, short_flap_count: int) -> int:
+    def _flap_count_from_flap_timestamp_count(self, flap_timestamp_count: int) -> int:
         """Return counted flaps after subtracting free_flaps.
 
         Example with free_flaps = 1:
 
-            short_flap_count = 1 -> flap_count = 0
-            short_flap_count = 2 -> flap_count = 1
-            short_flap_count = 3 -> flap_count = 2
+            flap_timestamp_count = 1 -> flap_count = 0
+            flap_timestamp_count = 2 -> flap_count = 1
+            flap_timestamp_count = 3 -> flap_count = 2
         """
-        return max(short_flap_count - self._free_flaps, 0)
+        return max(flap_timestamp_count - self._free_flaps, 0)
 
     def _hold_seconds_from_flap_count(self, flap_count: int) -> int:
         """Return total hold seconds for the current flap count.
@@ -831,9 +828,9 @@ def _default_window_seconds(max_hold_seconds: int) -> int:
     return ceil(max_hold_seconds * DEFAULT_WINDOW_MULTIPLIER)
 
 
-def _default_base_hold_seconds(short_flap_seconds: int) -> int:
-    """Return default base hold based on short-flap duration."""
-    return max(ceil(short_flap_seconds / 2), 1)
+def _default_base_hold_seconds(flap_gap_seconds: int) -> int:
+    """Return default base hold based on flap-gap duration."""
+    return max(ceil(flap_gap_seconds / 2), 1)
 
 
 def _parse_datetime_list(raw_values: Any) -> list[datetime]:

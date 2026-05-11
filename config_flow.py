@@ -36,14 +36,14 @@ from .const import (
     CONF_INPUT_ENTITY,
     CONF_MAX_HOLD_SECONDS,
     CONF_MIN_ON_SECONDS,
-    CONF_SHORT_FLAP_SECONDS,
+    CONF_FLAP_GAP_SECONDS,
     CONF_WINDOW_SECONDS,
     DEFAULT_ACTIVE_STATE,
     DEFAULT_FREE_FLAPS,
     DEFAULT_HOLD_FACTOR,
     DEFAULT_MAX_HOLD_SECONDS,
     DEFAULT_MIN_ON_SECONDS,
-    DEFAULT_SHORT_FLAP_SECONDS,
+    DEFAULT_FLAP_GAP_SECONDS,
     DEFAULT_WINDOW_MULTIPLIER,
     DOMAIN,
 )
@@ -53,15 +53,15 @@ def _default_window_seconds(max_hold_seconds: int) -> int:
     """Return the default memory window for a given maximum hold.
 
     We default the memory window to 1.5x the maximum hold. That means if the
-    maximum hold time is 15 minutes, Antiflap remembers short flaps for 22.5
+    maximum hold time is 15 minutes, Antiflap remembers flaps for 22.5
     minutes unless the user overrides it.
     """
     return ceil(max_hold_seconds * DEFAULT_WINDOW_MULTIPLIER)
 
 
-def _default_base_hold_seconds(short_flap_seconds: int) -> int:
-    """Return the default base hold as half the short-flap duration."""
-    return max(ceil(short_flap_seconds / 2), 1)
+def _default_base_hold_seconds(flap_gap_seconds: int) -> int:
+    """Return the default base hold as half the flap-gap duration."""
+    return max(ceil(flap_gap_seconds / 2), 1)
 
 
 def _current_data(config_entry: config_entries.ConfigEntry) -> dict[str, Any]:
@@ -91,7 +91,7 @@ def _build_schema(current: dict[str, Any] | None = None) -> vol.Schema:
             CONF_WINDOW_SECONDS, default=current[CONF_WINDOW_SECONDS])
 
     # base_hold_seconds is intentionally optional. If the user leaves it blank,
-    # the entity derives it from short_flap_seconds at runtime.
+    # the entity derives it from flap_gap_seconds at runtime.
     base_hold_key = vol.Optional(CONF_BASE_HOLD_SECONDS)
     if CONF_BASE_HOLD_SECONDS in current:
         base_hold_key = vol.Optional(
@@ -102,9 +102,9 @@ def _build_schema(current: dict[str, Any] | None = None) -> vol.Schema:
         input_entity_key = vol.Required(
             CONF_INPUT_ENTITY, default=current[CONF_INPUT_ENTITY])
 
-    short_flap_seconds = current.get(
-        CONF_SHORT_FLAP_SECONDS,
-        DEFAULT_SHORT_FLAP_SECONDS,
+    flap_gap_seconds = current.get(
+        CONF_FLAP_GAP_SECONDS,
+        DEFAULT_FLAP_GAP_SECONDS,
     )
 
     return vol.Schema(
@@ -122,8 +122,8 @@ def _build_schema(current: dict[str, Any] | None = None) -> vol.Schema:
             ): vol.All(vol.Coerce(int), vol.Range(min=0)),
 
             vol.Required(
-                CONF_SHORT_FLAP_SECONDS,
-                default=short_flap_seconds,
+                CONF_FLAP_GAP_SECONDS,
+                default=flap_gap_seconds,
             ): vol.All(vol.Coerce(int), vol.Range(min=1)),
 
             base_hold_key: vol.All(vol.Coerce(int), vol.Range(min=1)),
@@ -185,10 +185,10 @@ def _prepare_input(hass: HomeAssistant, user_input: dict[str, Any]) -> dict[str,
     else:
         user_input[CONF_ACTIVE_STATE] = active_state.strip()
 
-    short_flap_seconds = user_input[CONF_SHORT_FLAP_SECONDS]
+    flap_gap_seconds = user_input[CONF_FLAP_GAP_SECONDS]
     base = user_input.get(CONF_BASE_HOLD_SECONDS)
     if base is None:
-        base = _default_base_hold_seconds(short_flap_seconds)
+        base = _default_base_hold_seconds(flap_gap_seconds)
 
     max_hold = user_input[CONF_MAX_HOLD_SECONDS]
 

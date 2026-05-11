@@ -12,7 +12,7 @@ single source of truth for whether the request is active.
 input_entity: binary_sensor.office_motion
 active_state: "on"
 free_flaps: 1
-short_flap_seconds: 60
+flap_gap_seconds: 60
 base_hold_seconds: 30
 hold_factor: 1.4
 max_hold_seconds: 900
@@ -42,12 +42,12 @@ the source `input_entity` plus any entity IDs from the source entity's own
 
 When `input_entity` changes from the active state to any other state, the
 integration starts measuring an inactive gap. If `input_entity` returns to the
-active state within `short_flap_seconds`, it records a short flap timestamp.
-When `input_entity` next leaves the active state, Antiflap counts short flaps
+active state within `flap_gap_seconds`, it records a flap timestamp.
+When `input_entity` next leaves the active state, Antiflap counts flaps
 inside `window_seconds`, subtracts `free_flaps`, and calculates the hold:
 
 ```text
-flap_count = max(short_flap_count - free_flaps, 0)
+flap_count = max(flap_timestamp_count - free_flaps, 0)
 
 if flap_count <= 0:
     hold_seconds = 0
@@ -69,7 +69,7 @@ remains on because the request is active.
 
 ## Service
 
-Call `antiflap.reset` to clear short-flap history and any active hold for one or
+Call `antiflap.reset` to clear flap-gap history and any active hold for one or
 more Antiflap entities.
 
 ```yaml
