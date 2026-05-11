@@ -38,7 +38,7 @@ from homeassistant.const import (
     CONF_NAME,
     CONF_UNIQUE_ID,
 )
-from homeassistant.core import Event, HomeAssistant, callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -86,8 +86,6 @@ from .active_state import default_active_state
 from .calculations import default_base_hold_seconds, default_window_seconds
 
 _LOGGER = logging.getLogger(__name__)
-_DEFAULT_REGISTRY_ASSIGNMENT_DELAY_SECONDS = 1
-_DEFAULT_REGISTRY_ASSIGNMENT_MAX_ATTEMPTS = 60
 
 
 async def async_setup_entry(
@@ -147,6 +145,7 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         self._input_entity_id: str = data[CONF_INPUT_ENTITY]
         if (device_id := data.get(CONF_DEVICE_ID)) is not None:
             self.device_entry = dr.async_get(hass).async_get(device_id)
+        self._has_device = self.device_entry is not None
 
         configured_active_state = data.get(CONF_ACTIVE_STATE)
         if (
@@ -222,8 +221,6 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         # timer expires, or an old flap timestamp falls out of the
         # rolling window.
         self._cancel_update_timer = None
-        self._cancel_default_registry_assignment = None
-        self._default_registry_assignment_attempts = 0
 
     @property
     def suggested_object_id(self) -> str:
@@ -241,15 +238,11 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
 
         This is where it is safe to interact with Home Assistant:
 
-            - set default registry metadata from the input entity
             - restore old attributes
             - read the current input entity state
             - register state listeners
             - schedule timers
         """
-        if not self._assign_default_registry_metadata():
-            self._schedule_default_registry_assignment()
-
         await self._restore_previous_runtime_state()
 
         # Initialize active state without counting a flap. We only count a
@@ -278,13 +271,8 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         )
         self.async_on_remove(state_tracker)
 
-        registry_tracker = self.hass.bus.async_listen(
-            er.EVENT_ENTITY_REGISTRY_UPDATED,
-            self._handle_entity_registry_update,
-        )
-        self.async_on_remove(registry_tracker)
-
         self._schedule_next_update()
+        self._copy_explicit_area_if_unattached()
 
     @property
     def is_on(self) -> bool:
@@ -401,120 +389,26 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         self.async_write_ha_state()
 
     @callback
-    def _schedule_default_registry_assignment(self) -> None:
-        """Schedule registry metadata assignment after entity registry creation."""
-        if self._cancel_default_registry_assignment is not None:
-            self._cancel_default_registry_assignment()
-            self._cancel_default_registry_assignment = None
-
-        self._cancel_default_registry_assignment = async_call_later(
-            self.hass,
-            _DEFAULT_REGISTRY_ASSIGNMENT_DELAY_SECONDS,
-            self._handle_default_registry_assignment,
-        )
-        self.async_on_remove(self._cancel_default_registry_assignment)
-
-    @callback
-    def _handle_default_registry_assignment(self, now: datetime) -> None:
-        """Handle delayed registry metadata assignment."""
-        self._cancel_default_registry_assignment = None
-        assignment_finished = self._assign_default_registry_metadata()
-
-        if assignment_finished:
+    def _copy_explicit_area_if_unattached(self) -> None:
+        """Copy input entity area only when this helper is not device-attached."""
+        if self._has_device or self.entity_id is None:
             return
-
-        self._default_registry_assignment_attempts += 1
-
-        if (
-            self._default_registry_assignment_attempts
-            < _DEFAULT_REGISTRY_ASSIGNMENT_MAX_ATTEMPTS
-        ):
-            self._schedule_default_registry_assignment()
-
-    @callback
-    def _handle_entity_registry_update(self, event: Event) -> None:
-        """Refresh registry metadata when the input entity registry entry changes."""
-        entity_id = event.data.get("entity_id")
-
-        if entity_id not in (self._input_entity_id, self.entity_id):
-            return
-
-        self._default_registry_assignment_attempts = 0
-
-        if not self._assign_default_registry_metadata():
-            self._schedule_default_registry_assignment()
-
-    @callback
-    def _assign_default_registry_metadata(self) -> bool:
-        """Assign registry metadata from the input entity."""
-        entity_id = self.entity_id
-
-        if entity_id is None:
-            return False
 
         entity_registry = er.async_get(self.hass)
         input_entity_entry = entity_registry.async_get(self._input_entity_id)
 
-        if input_entity_entry is None:
-            _LOGGER.debug(
-                "Input entity %s has no entity registry entry yet; cannot assign "
-                "registry metadata for %s",
-                self._input_entity_id,
-                entity_id,
-            )
-            return False
+        if input_entity_entry is None or input_entity_entry.area_id is None:
+            return
 
-        entity_entry = entity_registry.async_get(entity_id)
+        entity_entry = entity_registry.async_get(self.entity_id)
 
-        if entity_entry is None:
-            _LOGGER.debug(
-                "Antiflap entity %s has no entity registry entry yet; cannot assign "
-                "registry metadata from %s",
-                entity_id,
-                self._input_entity_id,
-            )
-            return False
+        if entity_entry is None or entity_entry.area_id == input_entity_entry.area_id:
+            return
 
-        input_entity_category = input_entity_entry.entity_category
-
-        # area_id on the entity registry entry is an explicit entity area
-        # assignment. Do not copy area inherited from the input entity's device,
-        # and do not attach this helper to the input entity's device.
-        input_area_id = input_entity_entry.area_id
-
-        if (
-            input_area_id is None
-            and entity_entry.entity_category == input_entity_category
-        ):
-            _LOGGER.debug(
-                "Input entity %s has no explicit area or category metadata "
-                "to copy to %s",
-                self._input_entity_id,
-                entity_id,
-            )
-            return False
-
-        updates: dict[str, Any] = {}
-
-        if input_area_id is not None and entity_entry.area_id != input_area_id:
-            updates["area_id"] = input_area_id
-
-        if entity_entry.entity_category != input_entity_category:
-            updates["entity_category"] = input_entity_category
-
-        if updates:
-            _LOGGER.debug(
-                "Assigning registry metadata to %s from %s: %s",
-                entity_id,
-                self._input_entity_id,
-                updates,
-            )
-            self.registry_entry = entity_registry.async_update_entity(
-                entity_id,
-                **updates,
-            )
-
-        return True
+        self.registry_entry = entity_registry.async_update_entity(
+            self.entity_id,
+            area_id=input_entity_entry.area_id,
+        )
 
     async def _restore_previous_runtime_state(self) -> None:
         """Restore runtime memory from previous entity attributes.
