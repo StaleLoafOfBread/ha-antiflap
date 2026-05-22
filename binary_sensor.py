@@ -38,7 +38,7 @@ from homeassistant.const import (
     CONF_NAME,
     CONF_UNIQUE_ID,
 )
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -498,8 +498,9 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         return list(dict.fromkeys(entity_ids))
 
     @callback
-    def _handle_input_entity_change(self, *args: Any) -> None:
+    def _handle_input_entity_change(self, event: Event[Any]) -> None:
         """Handle changes in the input entity state."""
+        self.async_set_context(event.context)
         new_input_state = self._read_input_state()
         self._update_active_state(new_input_state)
         self._recalculate_and_write_state()
