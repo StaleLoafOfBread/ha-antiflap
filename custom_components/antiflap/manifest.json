@@ -1,7 +1,7 @@
 {
     "domain": "antiflap",
     "name": "Antiflap",
-    "codeowners": ["StaleLoafOfBread"],
+    "codeowners": ["@StaleLoafOfBread"],
     "config_flow": true,
     "dependencies": [],
     "documentation": "https://github.com/StaleLoafOfBread/ha-antiflap",

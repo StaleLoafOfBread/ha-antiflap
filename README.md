@@ -5,6 +5,16 @@ that sensor on for an adaptive hold period after repeated short inactive gaps.
 
 The defaults are optimized for use with a motion sensor controlling whether or not a room's lights should be on or off.
 
+## Installation
+
+### HACS
+
+1. Open HACS in Home Assistant.
+2. Add `https://github.com/StaleLoafOfBread/ha-antiflap` as a custom repository
+   with the category `Integration`.
+3. Install Antiflap from HACS.
+4. Restart Home Assistant.
+
 ## Example
 
 ```yaml
@@ -84,7 +94,7 @@ This is the exact input entity state string that means the request is active.
 For a normal binary sensor this is usually `on`. For another entity type, it
 could be another state such as `heat`, `cool`, or `open`.
 The current default mapping is in
-[`DEFAULT_ACTIVE_STATE_BY_DOMAIN`](https://github.com/StaleLoafOfBread/ha-antiflap/blob/main/active_state.py).
+[`DEFAULT_ACTIVE_STATE_BY_DOMAIN`](https://github.com/StaleLoafOfBread/ha-antiflap/blob/main/custom_components/antiflap/active_state.py).
 
 ### `free_flaps`
 
@@ -162,8 +172,8 @@ target:
 ## Translation notes
 
 Runtime UI labels and descriptions for this custom integration live in
-`translations/en.json`. `strings.json` is not required for Home Assistant to load
-custom integration translations.
+`custom_components/antiflap/translations/en.json`. `strings.json` is not
+required for Home Assistant to load custom integration translations.
 
 After changing translations, restart Home Assistant and hard-refresh the browser.
 The frontend caches translations, so stale cached text can make fixed
