@@ -17,7 +17,7 @@ jobs:
     runs-on: "ubuntu-latest"
     steps:
       - name: Check out pull request
-        uses: "actions/checkout@v4"
+        uses: "actions/checkout@v6"
 
       - name: Fetch base branch
         run: git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
@@ -42,7 +42,7 @@ jobs:
     runs-on: "ubuntu-latest"
     steps:
       - name: Check out repository
-        uses: "actions/checkout@v4"
+        uses: "actions/checkout@v6"
 
       - name: Hassfest validation
         uses: "home-assistant/actions/hassfest@master"
