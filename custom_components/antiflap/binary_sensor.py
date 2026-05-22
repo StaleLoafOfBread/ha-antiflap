@@ -270,6 +270,7 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
             self._handle_input_entity_change,
         )
         self.async_on_remove(state_tracker)
+        self.async_on_remove(self._cancel_scheduled_update)
 
         self._schedule_next_update()
         self._copy_explicit_area_if_unattached()
@@ -583,9 +584,7 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         Without this, the entity might stay on until some unrelated state change
         happens after the hold expires.
         """
-        if self._cancel_update_timer is not None:
-            self._cancel_update_timer()
-            self._cancel_update_timer = None
+        self._cancel_scheduled_update()
 
         delays: list[int] = []
 
@@ -610,7 +609,12 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
             delay,
             self._handle_scheduled_update,
         )
-        self.async_on_remove(self._cancel_update_timer)
+
+    def _cancel_scheduled_update(self) -> None:
+        """Cancel the currently scheduled update callback, if any."""
+        if self._cancel_update_timer is not None:
+            self._cancel_update_timer()
+            self._cancel_update_timer = None
 
     def _start_hold_if_needed(self, now: datetime) -> None:
         """Calculate and store a new hold window after active turns false."""
