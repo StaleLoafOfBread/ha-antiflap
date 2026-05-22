@@ -1,7 +1,12 @@
 name: Release
 
 on:
-  push:
+  # Do not release directly on push. Wait for a push-triggered Validate workflow
+  # to finish so HACS/Hassfest checks gate automatic releases from the default
+  # branch. Scheduled and manual validation runs should not publish releases.
+  workflow_run:
+    workflows: ["Validate"]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -10,12 +15,27 @@ permissions:
 jobs:
   release:
     name: Create GitHub release
-    if: github.ref_type == 'branch' && github.ref_name == github.event.repository.default_branch
+    # Automatic runs only release a successful Validate run that was originally
+    # triggered by a push to the default branch. Manual Release runs are still
+    # allowed, but only when started from the default branch.
+    if: >
+      (
+        github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == github.event.repository.default_branch
+      ) ||
+      (
+        github.event_name == 'workflow_dispatch' &&
+        github.ref_type == 'branch' &&
+        github.ref_name == github.event.repository.default_branch
+      )
     runs-on: "ubuntu-latest"
     steps:
       - name: Check out repository
         uses: "actions/checkout@v6"
         with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
 
       - name: Read manifest version
