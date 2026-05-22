@@ -35,7 +35,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async_remove_stale_devices_links_keep_current_device(
         hass,
         entry.entry_id,
-        entry.options.get(CONF_DEVICE_ID, entry.data.get(CONF_DEVICE_ID)),
+        entry.options.get(CONF_DEVICE_ID),
     )
 
     # If the user changes options later, reload this entry so the entity uses

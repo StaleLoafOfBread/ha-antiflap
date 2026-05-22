@@ -69,9 +69,6 @@
             "invalid_input_entity": "Select a valid entity.",
             "max_less_than_base": "Maximum hold seconds must be greater than or equal to base hold seconds.",
             "unknown": "Unexpected error"
-        },
-        "abort": {
-            "already_configured": "This Antiflap sensor is already configured."
         }
     },
     "options": {

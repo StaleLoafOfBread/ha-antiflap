@@ -65,14 +65,8 @@ DEFAULTED_CONFIG_KEYS = (
 
 
 def _current_data(config_entry: config_entries.ConfigEntry) -> dict[str, Any]:
-    """Return config-entry data with any options overlaid.
-
-    Home Assistant stores the original setup values in config_entry.data.
-    Later edits from the Options UI are stored in config_entry.options.
-
-    By merging them, the options form can show the current effective settings.
-    """
-    return {**config_entry.data, **config_entry.options}
+    """Return the current config-entry options."""
+    return dict(config_entry.options)
 
 
 def _build_schema(current: dict[str, Any] | None = None) -> vol.Schema:

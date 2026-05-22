@@ -140,7 +140,7 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         The constructor should only store values. It should not register event
         listeners yet; that happens in async_added_to_hass().
         """
-        data = _entry_data(entry)
+        data = entry.options
 
         self._entry = entry
         self._attr_name = _antiflap_name(data[CONF_NAME])
@@ -720,11 +720,6 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         now = now or _utcnow()
         if self._min_on_until <= now:
             self._min_on_until = None
-
-
-def _entry_data(entry: ConfigEntry) -> dict[str, Any]:
-    """Return config-entry data with options overlaid."""
-    return {**entry.data, **entry.options}
 
 
 def _antiflap_name(name: str) -> str:
