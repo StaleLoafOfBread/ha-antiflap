@@ -40,14 +40,12 @@ from .const import (
     CONF_MAX_HOLD_SECONDS,
     CONF_MIN_ON_SECONDS,
     CONF_FLAP_GAP_SECONDS,
-    CONF_SYNC_AREA,
     CONF_WINDOW_SECONDS,
     DEFAULT_FREE_FLAPS,
     DEFAULT_HOLD_FACTOR,
     DEFAULT_MAX_HOLD_SECONDS,
     DEFAULT_MIN_ON_SECONDS,
     DEFAULT_FLAP_GAP_SECONDS,
-    DEFAULT_SYNC_AREA,
     DOMAIN,
 )
 from .calculations import default_base_hold_seconds
@@ -103,11 +101,6 @@ def _build_schema(current: dict[str, Any] | None = None) -> vol.Schema:
                 CONF_ACTIVE_STATE,
                 default=current.get(CONF_ACTIVE_STATE, ""),
             ): selector.TextSelector(),
-
-            vol.Required(
-                CONF_SYNC_AREA,
-                default=current.get(CONF_SYNC_AREA, DEFAULT_SYNC_AREA),
-            ): selector.BooleanSelector(),
 
             vol.Required(SECTION_FLAP_DETECTION): section(
                 vol.Schema(

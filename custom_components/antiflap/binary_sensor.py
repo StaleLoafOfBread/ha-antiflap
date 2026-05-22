@@ -44,7 +44,6 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers import entity_platform
 from homeassistant.helpers.event import (
     async_call_later,
-    async_track_entity_registry_updated_event,
     async_track_state_change_event,
 )
 from homeassistant.helpers.restore_state import RestoreEntity
@@ -77,10 +76,8 @@ from .const import (
     CONF_MAX_HOLD_SECONDS,
     CONF_MIN_ON_SECONDS,
     CONF_FLAP_GAP_SECONDS,
-    CONF_SYNC_AREA,
     CONF_WINDOW_SECONDS,
     DEFAULT_MIN_ON_SECONDS,
-    DEFAULT_SYNC_AREA,
     DOMAIN,
     SERVICE_RESET,
 )
@@ -181,7 +178,6 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
                 self._max_hold_seconds,
             ),
         )
-        self._sync_area: bool = data.get(CONF_SYNC_AREA, DEFAULT_SYNC_AREA)
 
         # Runtime state -------------------------------------------------------
 
@@ -276,16 +272,7 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         self.async_on_remove(state_tracker)
         self.async_on_remove(self._cancel_scheduled_update)
 
-        if self._sync_area and not self._has_device:
-            area_tracker = async_track_entity_registry_updated_event(
-                self.hass,
-                [self._input_entity_id],
-                self._handle_input_entity_registry_update,
-            )
-            self.async_on_remove(area_tracker)
-
         self._schedule_next_update()
-        self._sync_area_if_unattached()
 
     @property
     def is_on(self) -> bool:
@@ -400,40 +387,6 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
 
         self._schedule_next_update()
         self.async_write_ha_state()
-
-    @callback
-    def _sync_area_if_unattached(self) -> None:
-        """Mirror input entity area when configured and not device-attached."""
-        if not self._sync_area or self._has_device or self.entity_id is None:
-            return
-
-        entity_registry = er.async_get(self.hass)
-        input_entity_entry = entity_registry.async_get(self._input_entity_id)
-
-        if input_entity_entry is None:
-            return
-
-        entity_entry = entity_registry.async_get(self.entity_id)
-
-        if entity_entry is None:
-            return
-
-        if entity_entry.area_id == input_entity_entry.area_id:
-            return
-
-        self.registry_entry = entity_registry.async_update_entity(
-            self.entity_id,
-            area_id=input_entity_entry.area_id,
-        )
-
-    @callback
-    def _handle_input_entity_registry_update(self, event: Event[Any]) -> None:
-        """Mirror source entity area changes when area sync is enabled."""
-        if (
-            event.data.get("action") == "update"
-            and "area_id" in event.data.get("changes", {})
-        ):
-            self._sync_area_if_unattached()
 
     async def _restore_previous_runtime_state(self) -> None:
         """Restore runtime memory from previous entity attributes.
