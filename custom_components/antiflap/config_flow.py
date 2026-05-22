@@ -24,14 +24,12 @@ from homeassistant.const import (
     ATTR_FRIENDLY_NAME,
     CONF_DEVICE_ID,
     CONF_NAME,
-    CONF_UNIQUE_ID,
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult, section
 from homeassistant.helpers.device import async_entity_id_to_device_id
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import selector
-from homeassistant.util import slugify
 
 from .const import (
     CONF_BASE_HOLD_SECONDS,
@@ -266,15 +264,6 @@ class AntiflapConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             if not errors:
                 _remove_blank_derived_values(user_input)
-
-                # This unique ID prevents accidentally creating the exact same
-                # helper twice for one input entity.
-                unique_id = slugify(
-                    f"{DOMAIN}_{user_input[CONF_INPUT_ENTITY]}")
-                await self.async_set_unique_id(unique_id)
-                self._abort_if_unique_id_configured()
-
-                user_input[CONF_UNIQUE_ID] = unique_id
 
                 return self.async_create_entry(
                     title=user_input[CONF_NAME],

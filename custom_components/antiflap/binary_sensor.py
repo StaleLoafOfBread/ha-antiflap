@@ -36,7 +36,6 @@ from homeassistant.const import (
     ATTR_ENTITY_ID,
     CONF_DEVICE_ID,
     CONF_NAME,
-    CONF_UNIQUE_ID,
 )
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
@@ -139,13 +138,13 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         self._entry = entry
         self._attr_name = _antiflap_name(data[CONF_NAME])
 
-        # Use the config entry unique_id if available. If not, fall back to the
-        # entry ID. Entity unique IDs are what let Home Assistant remember user
-        # customizations like renamed entity IDs.
-        self._attr_unique_id = data.get(
-            CONF_UNIQUE_ID) or entry.unique_id or entry.entry_id
+        # This integration creates one entity per config entry, so the config
+        # entry ID is the helper's stable entity unique ID.
+        self._attr_unique_id = entry.entry_id
 
         self._input_entity_id: str = data[CONF_INPUT_ENTITY]
+        self.entity_id = f"binary_sensor.{self.suggested_object_id}"
+
         if (device_id := data.get(CONF_DEVICE_ID)) is not None:
             self.device_entry = dr.async_get(hass).async_get(device_id)
         self._has_device = self.device_entry is not None
@@ -235,7 +234,8 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
 
             binary_sensor.office_light_antiflap
         """
-        return slugify(self._attr_name)
+        source_object_id = self._input_entity_id.split(".", 1)[-1]
+        return slugify(_antiflap_name(source_object_id))
 
     async def async_added_to_hass(self) -> None:
         """Finish setup after Home Assistant has added the entity.
