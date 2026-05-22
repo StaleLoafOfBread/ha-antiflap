@@ -20,6 +20,7 @@ The defaults are optimized for use with a motion sensor controlling whether or n
 ```yaml
 input_entity: binary_sensor.office_motion
 active_state: "on"
+sync_area: true
 free_flaps: 0
 flap_gap_seconds: 120
 base_hold_seconds: 30
@@ -49,6 +50,10 @@ keeps the previous behavior.
 The Antiflap binary sensor also exposes an `entity_id` attribute. It contains
 the source `input_entity` plus any entity IDs from the source entity's own
 `entity_id` attribute, which lets Home Assistant show group-style source info.
+
+By default, Antiflap keeps its entity area in sync with the original entity.
+Turn off `sync_area` if you want to assign the Antiflap entity to a different
+area manually or leave it unset.
 
 When `input_entity` changes from the active state to any other state, the
 integration starts measuring an inactive gap. If `input_entity` returns to the
@@ -95,6 +100,13 @@ For a normal binary sensor this is usually `on`. For another entity type, it
 could be another state such as `heat`, `cool`, or `open`.
 The current default mapping is in
 [`DEFAULT_ACTIVE_STATE_BY_DOMAIN`](https://github.com/StaleLoafOfBread/ha-antiflap/blob/main/custom_components/antiflap/active_state.py).
+
+### `sync_area`
+
+*Optional.* Defaults to `true`.
+
+When enabled, Antiflap keeps its entity area synchronized with the original
+entity. When disabled, Antiflap does not change its entity area.
 
 ### `free_flaps`
 
