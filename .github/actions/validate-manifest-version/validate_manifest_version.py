@@ -64,7 +64,7 @@ def read_manifest_version(manifest_path: Path, label: str, content: str) -> str:
     return version
 
 
-def read_base_manifest(manifest_path: Path) -> str:
+def read_base_manifest(manifest_path: Path, base_label: str) -> str:
     """Read manifest content from FETCH_HEAD."""
     try:
         return subprocess.check_output(
@@ -75,7 +75,7 @@ def read_base_manifest(manifest_path: Path) -> str:
         error(
             manifest_path,
             "Missing base branch manifest",
-            "Could not read manifest.json from the pull request base branch",
+            f"Could not read manifest.json from {base_label}",
         )
         raise
 
@@ -92,9 +92,10 @@ def main() -> int:
     """Validate the pull request manifest version."""
     args = parse_args()
     manifest_path: Path = args.manifest_path
+    base_label = f"base branch '{args.base_ref}'" if args.base_ref else "the base branch"
 
     try:
-        base_manifest = read_base_manifest(manifest_path)
+        base_manifest = read_base_manifest(manifest_path, base_label)
         pr_manifest = manifest_path.read_text(encoding="utf-8")
     except FileNotFoundError:
         error(manifest_path, "Missing pull request manifest", "manifest.json was not found")
@@ -105,7 +106,7 @@ def main() -> int:
     try:
         base_version = read_manifest_version(
             manifest_path,
-            "base branch manifest",
+            f"{base_label} manifest",
             base_manifest,
         )
         pr_version = read_manifest_version(
