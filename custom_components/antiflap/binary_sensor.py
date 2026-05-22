@@ -60,6 +60,7 @@ from .const import (
     ATTR_HOLD_UNTIL,
     ATTR_INACTIVE_STARTED_AT,
     ATTR_MAX_HOLD_SECONDS,
+    ATTR_MIN_BASE_HOLD_SECONDS,
     ATTR_MIN_ON_SECONDS,
     ATTR_MIN_ON_UNTIL,
     ATTR_INPUT_ENTITY,
@@ -74,15 +75,24 @@ from .const import (
     CONF_HOLD_FACTOR,
     CONF_INPUT_ENTITY,
     CONF_MAX_HOLD_SECONDS,
+    CONF_MIN_BASE_HOLD_SECONDS,
     CONF_MIN_ON_SECONDS,
     CONF_FLAP_GAP_SECONDS,
     CONF_WINDOW_SECONDS,
+    DEFAULT_FREE_FLAPS,
+    DEFAULT_FLAP_GAP_SECONDS,
+    DEFAULT_HOLD_FACTOR,
+    DEFAULT_MAX_HOLD_SECONDS,
+    DEFAULT_MIN_BASE_HOLD_SECONDS,
     DEFAULT_MIN_ON_SECONDS,
     DOMAIN,
     SERVICE_RESET,
 )
 from .active_state import default_active_state
-from .calculations import default_base_hold_seconds, default_window_seconds
+from .calculations import (
+    default_base_hold_seconds_with_floor,
+    default_window_seconds,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -155,15 +165,27 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         else:
             self._active_state = default_active_state(hass, self._input_entity_id)
 
-        self._free_flaps: int = data[CONF_FREE_FLAPS]
-        self._flap_gap_seconds: int = data[CONF_FLAP_GAP_SECONDS]
+        self._free_flaps: int = data.get(CONF_FREE_FLAPS, DEFAULT_FREE_FLAPS)
+        self._flap_gap_seconds: int = data.get(
+            CONF_FLAP_GAP_SECONDS,
+            DEFAULT_FLAP_GAP_SECONDS,
+        )
+        self._min_base_hold_seconds: int | None = data.get(
+            CONF_MIN_BASE_HOLD_SECONDS,
+            DEFAULT_MIN_BASE_HOLD_SECONDS,
+        )
         base_hold_seconds = data.get(CONF_BASE_HOLD_SECONDS)
         if base_hold_seconds is None:
-            base_hold_seconds = default_base_hold_seconds(
-                self._flap_gap_seconds)
+            base_hold_seconds = default_base_hold_seconds_with_floor(
+                self._flap_gap_seconds,
+                self._min_base_hold_seconds,
+            )
         self._base_hold_seconds: int = base_hold_seconds
-        self._hold_factor: float = data[CONF_HOLD_FACTOR]
-        self._max_hold_seconds: int = data[CONF_MAX_HOLD_SECONDS]
+        self._hold_factor: float = data.get(CONF_HOLD_FACTOR, DEFAULT_HOLD_FACTOR)
+        self._max_hold_seconds: int = data.get(
+            CONF_MAX_HOLD_SECONDS,
+            DEFAULT_MAX_HOLD_SECONDS,
+        )
         self._min_on_seconds: int = data.get(
             CONF_MIN_ON_SECONDS,
             DEFAULT_MIN_ON_SECONDS,
@@ -327,6 +349,7 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
             ATTR_HOLD_SECONDS: self._hold_seconds,
             ATTR_HOLD_UNTIL: _datetime_to_iso(self._hold_until),
             ATTR_MAX_HOLD_SECONDS: self._max_hold_seconds,
+            ATTR_MIN_BASE_HOLD_SECONDS: self._min_base_hold_seconds,
             ATTR_MIN_ON_SECONDS: self._min_on_seconds,
             ATTR_MIN_ON_UNTIL: _datetime_to_iso(self._min_on_until),
             ATTR_ACTIVE_STARTED_AT: _datetime_to_iso(self._active_started_at),

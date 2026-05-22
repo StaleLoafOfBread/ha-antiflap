@@ -6,6 +6,7 @@ from math import ceil, log
 
 from .const import (
     DEFAULT_BASE_HOLD_DIVISOR,
+    DEFAULT_MIN_BASE_HOLD_SECONDS,
     DEFAULT_WINDOW_FLAP_COUNT,
     DEFAULT_WINDOW_FLAP_GAP_DIVISOR,
 )
@@ -68,4 +69,21 @@ def _flap_count_to_reach_max_hold(
 
 def default_base_hold_seconds(flap_gap_seconds: int) -> int:
     """Return the default base hold as a fraction of the flap-gap duration."""
-    return max(ceil(flap_gap_seconds / DEFAULT_BASE_HOLD_DIVISOR), 1)
+    return default_base_hold_seconds_with_floor(
+        flap_gap_seconds,
+        DEFAULT_MIN_BASE_HOLD_SECONDS,
+    )
+
+
+def default_base_hold_seconds_with_floor(
+    flap_gap_seconds: int,
+    min_base_hold_seconds: int | None,
+) -> int:
+    """Return the default base hold using a configurable minimum floor."""
+    if min_base_hold_seconds is None:
+        min_base_hold_seconds = flap_gap_seconds
+
+    return max(
+        ceil(flap_gap_seconds / DEFAULT_BASE_HOLD_DIVISOR),
+        min_base_hold_seconds,
+    )

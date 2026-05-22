@@ -38,20 +38,30 @@ from .const import (
     CONF_HOLD_FACTOR,
     CONF_INPUT_ENTITY,
     CONF_MAX_HOLD_SECONDS,
+    CONF_MIN_BASE_HOLD_SECONDS,
     CONF_MIN_ON_SECONDS,
     CONF_FLAP_GAP_SECONDS,
     CONF_WINDOW_SECONDS,
-    DEFAULT_FREE_FLAPS,
-    DEFAULT_HOLD_FACTOR,
     DEFAULT_MAX_HOLD_SECONDS,
-    DEFAULT_MIN_ON_SECONDS,
+    DEFAULT_MIN_BASE_HOLD_SECONDS,
     DEFAULT_FLAP_GAP_SECONDS,
     DOMAIN,
 )
-from .calculations import default_base_hold_seconds
+from .calculations import default_base_hold_seconds_with_floor
 
 SECTION_FLAP_DETECTION = "flap_detection"
 SECTION_HOLD_BEHAVIOR = "hold_behavior"
+
+DEFAULTED_CONFIG_KEYS = (
+    CONF_FREE_FLAPS,
+    CONF_FLAP_GAP_SECONDS,
+    CONF_BASE_HOLD_SECONDS,
+    CONF_MIN_BASE_HOLD_SECONDS,
+    CONF_HOLD_FACTOR,
+    CONF_MAX_HOLD_SECONDS,
+    CONF_MIN_ON_SECONDS,
+    CONF_WINDOW_SECONDS,
+)
 
 
 def _current_data(config_entry: config_entries.ConfigEntry) -> dict[str, Any]:
@@ -78,20 +88,28 @@ def _build_schema(current: dict[str, Any] | None = None) -> vol.Schema:
         input_entity_key = vol.Required(
             CONF_INPUT_ENTITY, default=current[CONF_INPUT_ENTITY])
 
-    base_hold_key = vol.Optional(CONF_BASE_HOLD_SECONDS)
-    if CONF_BASE_HOLD_SECONDS in current:
-        base_hold_key = vol.Optional(
-            CONF_BASE_HOLD_SECONDS, default=current[CONF_BASE_HOLD_SECONDS])
+    def optional_key(key: str) -> vol.Optional:
+        if key in current:
+            return vol.Optional(key, default=current[key])
 
-    window_key = vol.Optional(CONF_WINDOW_SECONDS)
-    if CONF_WINDOW_SECONDS in current:
-        window_key = vol.Optional(
-            CONF_WINDOW_SECONDS, default=current[CONF_WINDOW_SECONDS])
+        return vol.Optional(key)
 
-    flap_gap_seconds = current.get(
-        CONF_FLAP_GAP_SECONDS,
-        DEFAULT_FLAP_GAP_SECONDS,
-    )
+    def optional_int(*, min_value: int) -> vol.Schema:
+        return vol.Any(
+            None,
+            "",
+            vol.All(vol.Coerce(int), vol.Range(min=min_value)),
+        )
+
+    def optional_float(*, min_value: float) -> vol.Schema:
+        return vol.Any(
+            None,
+            "",
+            vol.All(vol.Coerce(float), vol.Range(min=min_value)),
+        )
+
+    base_hold_key = optional_key(CONF_BASE_HOLD_SECONDS)
+    window_key = optional_key(CONF_WINDOW_SECONDS)
 
     return vol.Schema(
         {
@@ -105,20 +123,11 @@ def _build_schema(current: dict[str, Any] | None = None) -> vol.Schema:
             vol.Required(SECTION_FLAP_DETECTION): section(
                 vol.Schema(
                     {
-                        vol.Required(
-                            CONF_FREE_FLAPS,
-                            default=current.get(
-                                CONF_FREE_FLAPS,
-                                DEFAULT_FREE_FLAPS,
-                            ),
-                        ): vol.All(vol.Coerce(int), vol.Range(min=0)),
+                        optional_key(CONF_FREE_FLAPS): optional_int(min_value=0),
 
-                        vol.Required(
-                            CONF_FLAP_GAP_SECONDS,
-                            default=flap_gap_seconds,
-                        ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+                        optional_key(CONF_FLAP_GAP_SECONDS): optional_int(min_value=1),
 
-                        window_key: vol.All(vol.Coerce(int), vol.Range(min=1)),
+                        window_key: optional_int(min_value=1),
                     }
                 ),
                 {"collapsed": True},
@@ -127,31 +136,17 @@ def _build_schema(current: dict[str, Any] | None = None) -> vol.Schema:
             vol.Required(SECTION_HOLD_BEHAVIOR): section(
                 vol.Schema(
                     {
-                        base_hold_key: vol.All(vol.Coerce(int), vol.Range(min=1)),
+                        base_hold_key: optional_int(min_value=1),
 
-                        vol.Required(
-                            CONF_HOLD_FACTOR,
-                            default=current.get(
-                                CONF_HOLD_FACTOR,
-                                DEFAULT_HOLD_FACTOR,
-                            ),
-                        ): vol.All(vol.Coerce(float), vol.Range(min=1.0)),
+                        optional_key(CONF_MIN_BASE_HOLD_SECONDS): optional_int(
+                            min_value=1,
+                        ),
 
-                        vol.Required(
-                            CONF_MAX_HOLD_SECONDS,
-                            default=current.get(
-                                CONF_MAX_HOLD_SECONDS,
-                                DEFAULT_MAX_HOLD_SECONDS,
-                            ),
-                        ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+                        optional_key(CONF_HOLD_FACTOR): optional_float(min_value=1.0),
 
-                        vol.Required(
-                            CONF_MIN_ON_SECONDS,
-                            default=current.get(
-                                CONF_MIN_ON_SECONDS,
-                                DEFAULT_MIN_ON_SECONDS,
-                            ),
-                        ): vol.All(vol.Coerce(int), vol.Range(min=0)),
+                        optional_key(CONF_MAX_HOLD_SECONDS): optional_int(min_value=1),
+
+                        optional_key(CONF_MIN_ON_SECONDS): optional_int(min_value=0),
                     }
                 ),
                 {"collapsed": True},
@@ -215,12 +210,28 @@ def _prepare_input(hass: HomeAssistant, user_input: dict[str, Any]) -> dict[str,
     else:
         user_input[CONF_ACTIVE_STATE] = ""
 
-    flap_gap_seconds = user_input[CONF_FLAP_GAP_SECONDS]
+    flap_gap_seconds = _override_or_default(
+        user_input,
+        CONF_FLAP_GAP_SECONDS,
+        DEFAULT_FLAP_GAP_SECONDS,
+    )
+    min_base_hold_seconds = _override_or_default(
+        user_input,
+        CONF_MIN_BASE_HOLD_SECONDS,
+        DEFAULT_MIN_BASE_HOLD_SECONDS,
+    )
     base = user_input.get(CONF_BASE_HOLD_SECONDS)
-    if base is None:
-        base = default_base_hold_seconds(flap_gap_seconds)
+    if base in (None, ""):
+        base = default_base_hold_seconds_with_floor(
+            flap_gap_seconds,
+            min_base_hold_seconds,
+        )
 
-    max_hold = user_input[CONF_MAX_HOLD_SECONDS]
+    max_hold = _override_or_default(
+        user_input,
+        CONF_MAX_HOLD_SECONDS,
+        DEFAULT_MAX_HOLD_SECONDS,
+    )
 
     if max_hold < base:
         errors[CONF_MAX_HOLD_SECONDS] = "max_less_than_base"
@@ -232,10 +243,24 @@ def _prepare_input(hass: HomeAssistant, user_input: dict[str, Any]) -> dict[str,
     return errors
 
 
+def _override_or_default(
+    user_input: dict[str, Any],
+    key: str,
+    default: int | float | None,
+) -> int | float | None:
+    """Return a submitted override, or the runtime default for blank values."""
+    value = user_input.get(key)
+
+    if value in (None, ""):
+        return default
+
+    return value
+
+
 def _remove_blank_derived_values(user_input: dict[str, Any]) -> None:
-    """Remove blank override values so the entity derives them at runtime."""
-    for key in (CONF_BASE_HOLD_SECONDS, CONF_WINDOW_SECONDS):
-        if key in user_input and user_input[key] is None:
+    """Remove blank override values so the entity uses runtime defaults."""
+    for key in DEFAULTED_CONFIG_KEYS:
+        if key in user_input and user_input[key] in (None, ""):
             user_input.pop(key)
 
 
