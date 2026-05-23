@@ -1,0 +1,48 @@
+name: Validate
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-version:
+    name: Validate manifest version
+    if: github.event_name == 'pull_request'
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: Check out pull request
+        uses: "actions/checkout@v6"
+
+      - name: Fetch base branch
+        run: git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+
+      - name: Compare manifest versions
+        uses: ./.github/actions/validate-manifest-version
+        with:
+          base-ref: ${{ github.base_ref }}
+          manifest-path: custom_components/antiflap/manifest.json
+
+  validate-hacs:
+    name: Validate with HACS
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: HACS validation
+        uses: "hacs/action@main"
+        with:
+          category: "integration"
+
+  validate-hassfest:
+    name: Validate with Hassfest
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: Check out repository
+        uses: "actions/checkout@v6"
+
+      - name: Hassfest validation
+        uses: "home-assistant/actions/hassfest@master"

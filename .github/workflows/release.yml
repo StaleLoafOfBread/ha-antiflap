@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  # Do not release directly on push. Wait for a push-triggered Validate workflow
+  # to finish so HACS/Hassfest checks gate automatic releases from the default
+  # branch. Scheduled and manual validation runs should not publish releases.
+  workflow_run:
+    workflows: ["Validate"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create GitHub release
+    # Automatic runs only release a successful Validate run that was originally
+    # triggered by a push to the default branch. Manual Release runs are still
+    # allowed, but only when started from the default branch.
+    if: >
+      (
+        github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == github.event.repository.default_branch
+      ) ||
+      (
+        github.event_name == 'workflow_dispatch' &&
+        github.ref_type == 'branch' &&
+        github.ref_name == github.event.repository.default_branch
+      )
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: Check out repository
+        uses: "actions/checkout@v6"
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Read manifest version
+        id: version
+        run: |
+          version="$(python -c 'import json; print(json.load(open("custom_components/antiflap/manifest.json", encoding="utf-8"))["version"])')"
+          echo "Manifest version: ${version}"
+          echo "Release tag: v${version}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Create tag and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "Tag ${TAG} already exists."
+          else
+            git tag -a "${TAG}" -m "Antiflap ${VERSION}"
+            git push origin "${TAG}"
+          fi
+
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists."
+          else
+            gh release create "${TAG}" \
+              --verify-tag \
+              --title "Antiflap ${VERSION}" \
+              --notes "Release ${TAG}"
+          fi

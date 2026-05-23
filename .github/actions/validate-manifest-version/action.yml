@@ -1,0 +1,24 @@
+name: Validate manifest version
+description: Validate that a PR manifest version is greater than the base branch version.
+
+inputs:
+  base-ref:
+    description: Git ref for the pull request base branch.
+    required: true
+  manifest-path:
+    description: Path to the integration manifest file.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install version parser
+      shell: bash
+      run: python -m pip install packaging
+
+    - name: Compare manifest versions
+      shell: bash
+      run: >
+        python "${{ github.action_path }}/validate_manifest_version.py"
+        --base-ref "${{ inputs.base-ref }}"
+        --manifest-path "${{ inputs.manifest-path }}"

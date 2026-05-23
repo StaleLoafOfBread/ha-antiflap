@@ -1,0 +1,144 @@
+{
+    "title": "Antiflap",
+    "config": {
+        "step": {
+            "user": {
+                "title": "Set up Antiflap",
+                "description": "Create a binary sensor that resists short inactive/request gaps by holding on longer after repeated short gaps.",
+                "data": {
+                    "input_entity": "Original entity",
+                    "active_state": "Active state",
+                    "free_flaps": "Free flaps",
+                    "flap_gap_seconds": "Flap gap seconds",
+                    "base_hold_seconds": "Base hold seconds",
+                    "min_base_hold_seconds": "Minimum base hold seconds",
+                    "hold_factor": "Hold Multiplication Factor",
+                    "max_hold_seconds": "Maximum hold seconds",
+                    "min_on_seconds": "Minimum on seconds",
+                    "window_seconds": "Memory window seconds"
+                },
+                "data_description": {
+                    "input_entity": "Entity to apply the Antiflap logic to.",
+                    "active_state": "Input entity state that means active. Leave blank to use the default (`default: on`).",
+                    "free_flaps": "How many flaps are ignored before adaptive hold begins. Leave blank to use the default (`default: 0`).",
+                    "flap_gap_seconds": "Inactive gaps at or below this duration count as flaps when the input becomes active again. Leave blank to use the default (`default: 30 seconds`).",
+                    "base_hold_seconds": "The first hold duration after the free flaps are exceeded. Leave blank to calculate it from flap gap seconds and minimum base hold seconds (`default: max(ceil(flap_gap_seconds / 4), min_base_hold_seconds) =  max(ceil(30 / 4), 30) = 30 seconds`).",
+                    "min_base_hold_seconds": "Minimum derived base hold when base hold seconds is blank. Leave blank to use the current flap gap seconds (`default: 30 seconds`).",
+                    "hold_factor": "Multiplier used to grow each additional hold duration. Leave blank to use the default (`default: 1.5`).",
+                    "max_hold_seconds": "Maximum hold duration. Leave blank to use the default (`default: 600 seconds`).",
+                    "min_on_seconds": "Minimum time the Antiflap sensor must stay on after it turns on. Leave blank to use the default (`default: 0 seconds`).",
+                    "window_seconds": "How long recent flaps are remembered. Leave blank to calculate it from free flaps, flap gap seconds, base hold seconds, hold factor, and maximum hold seconds (`default: 120 seconds`)."
+                },
+                "sections": {
+                    "flap_detection": {
+                        "name": "Flap detection",
+                        "description": "Settings that decide when short inactive gaps count as flaps.",
+                        "data": {
+                            "free_flaps": "Free flaps",
+                            "flap_gap_seconds": "Flap gap seconds",
+                            "window_seconds": "Memory window seconds"
+                        },
+                        "data_description": {
+                            "free_flaps": "How many flaps are ignored before adaptive hold begins. Leave blank to use the default (`default: 0`).",
+                            "flap_gap_seconds": "Inactive gaps at or below this duration count as flaps when the input becomes active again. Leave blank to use the default (`default: 30 seconds`).",
+                            "window_seconds": "How long recent flaps are remembered. Leave blank to calculate it from free flaps, flap gap seconds, base hold seconds, hold factor, and maximum hold seconds (`default: 120 seconds`)."
+                        }
+                    },
+                    "hold_behavior": {
+                        "name": "Hold behavior",
+                        "description": "Settings that control how long Antiflap stays on after repeated flaps.",
+                        "data": {
+                            "base_hold_seconds": "Base hold seconds",
+                            "min_base_hold_seconds": "Minimum base hold seconds",
+                            "hold_factor": "Hold Multiplication Factor",
+                            "max_hold_seconds": "Maximum hold seconds",
+                            "min_on_seconds": "Minimum on seconds"
+                        },
+                        "data_description": {
+                            "base_hold_seconds": "The first hold duration after the free flaps are exceeded. Leave blank to calculate it from flap gap seconds and minimum base hold seconds (`default: max(ceil(flap_gap_seconds / 4), min_base_hold_seconds) =  max(ceil(30 / 4), 30) = 30 seconds`).",
+                            "min_base_hold_seconds": "Minimum derived base hold when base hold seconds is blank. Leave blank to use the current flap gap seconds (`default: 30 seconds`).",
+                            "hold_factor": "Multiplier used to grow each additional hold duration. Leave blank to use the default (`default: 1.5`).",
+                            "max_hold_seconds": "Maximum hold duration. Leave blank to use the default (`default: 600 seconds`).",
+                            "min_on_seconds": "Minimum time the Antiflap sensor must stay on after it turns on. Leave blank to use the default (`default: 0 seconds`)."
+                        }
+                    }
+                }
+            }
+        },
+        "error": {
+            "invalid_input_entity": "Select a valid entity.",
+            "max_less_than_base": "Maximum hold seconds must be greater than or equal to base hold seconds.",
+            "unknown": "Unexpected error"
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Antiflap options",
+                "data": {
+                    "input_entity": "Input entity",
+                    "active_state": "Active state",
+                    "free_flaps": "Free flaps",
+                    "flap_gap_seconds": "Flap gap seconds",
+                    "base_hold_seconds": "Base hold seconds",
+                    "min_base_hold_seconds": "Minimum base hold seconds",
+                    "hold_factor": "Hold factor",
+                    "max_hold_seconds": "Maximum hold seconds",
+                    "min_on_seconds": "Minimum on seconds",
+                    "window_seconds": "Memory window seconds"
+                },
+                "data_description": {
+                    "input_entity": "Entity to apply the Antiflap logic to.",
+                    "active_state": "Input entity state that means active. Leave blank to use the default (`default: on`).",
+                    "free_flaps": "How many flaps are ignored before adaptive hold begins. Leave blank to use the default (`default: 0`).",
+                    "flap_gap_seconds": "Inactive gaps at or below this duration count as flaps when the input becomes active again. Leave blank to use the default (`default: 30 seconds`).",
+                    "base_hold_seconds": "The first hold duration after the free flaps are exceeded. Leave blank to calculate it from flap gap seconds and minimum base hold seconds (`default: max(ceil(flap_gap_seconds / 4), min_base_hold_seconds)`). With defaults: max(ceil(30 / 4), 30) = 30 seconds.",
+                    "min_base_hold_seconds": "Minimum derived base hold when base hold seconds is blank. Leave blank to use the current flap gap seconds (`default: 30 seconds`).",
+                    "hold_factor": "Multiplier used to grow each additional hold duration. Leave blank to use the default (`default: 1.5`).",
+                    "max_hold_seconds": "Maximum hold duration. Leave blank to use the default (`default: 600 seconds`).",
+                    "min_on_seconds": "Minimum time the Antiflap sensor must stay on after it turns on. Leave blank to use the default (`default: 0 seconds`).",
+                    "window_seconds": "How long recent flaps are remembered. Leave blank to calculate it from free flaps, flap gap seconds, base hold seconds, hold factor, and maximum hold seconds (`default: 120 seconds`)."
+                },
+                "sections": {
+                    "flap_detection": {
+                        "name": "Flap detection",
+                        "description": "Settings that decide when short inactive gaps count as flaps.",
+                        "data": {
+                            "free_flaps": "Free flaps",
+                            "flap_gap_seconds": "Flap gap seconds",
+                            "window_seconds": "Memory window seconds"
+                        },
+                        "data_description": {
+                            "free_flaps": "How many flaps are ignored before adaptive hold begins. Leave blank to use the default (`default: 0`).",
+                            "flap_gap_seconds": "Inactive gaps at or below this duration count as flaps when the input becomes active again. Leave blank to use the default (`default: 30 seconds`).",
+                            "window_seconds": "How long recent flaps are remembered. Leave blank to calculate it from free flaps, flap gap seconds, base hold seconds, hold factor, and maximum hold seconds (`default: 120 seconds`)."
+                        }
+                    },
+                    "hold_behavior": {
+                        "name": "Hold behavior",
+                        "description": "Settings that control how long Antiflap stays on after repeated flaps.",
+                        "data": {
+                            "base_hold_seconds": "Base hold seconds",
+                            "min_base_hold_seconds": "Minimum base hold seconds",
+                            "hold_factor": "Hold factor",
+                            "max_hold_seconds": "Maximum hold seconds",
+                            "min_on_seconds": "Minimum on seconds"
+                        },
+                        "data_description": {
+                            "base_hold_seconds": "The first hold duration after the free flaps are exceeded. Leave blank to calculate it from flap gap seconds and minimum base hold seconds (`default: max(ceil(flap_gap_seconds / 4), min_base_hold_seconds)`). With defaults: max(ceil(30 / 4), 30) = 30 seconds.",
+                            "min_base_hold_seconds": "Minimum derived base hold when base hold seconds is blank. Leave blank to use the current flap gap seconds (`default: 30 seconds`).",
+                            "hold_factor": "Multiplier used to grow each additional hold duration. Leave blank to use the default (`default: 1.5`).",
+                            "max_hold_seconds": "Maximum hold duration. Leave blank to use the default (`default: 600 seconds`).",
+                            "min_on_seconds": "Minimum time the Antiflap sensor must stay on after it turns on. Leave blank to use the default (`default: 0 seconds`)."
+                        }
+                    }
+                }
+            }
+        },
+        "error": {
+            "invalid_input_entity": "Select a valid entity.",
+            "max_less_than_base": "Maximum hold seconds must be greater than or equal to base hold seconds.",
+            "unknown": "Unexpected error"
+        }
+    }
+}
