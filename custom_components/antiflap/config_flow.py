@@ -25,29 +25,29 @@ from homeassistant.const import (
     CONF_DEVICE_ID,
     CONF_NAME,
 )
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult, section
-from homeassistant.helpers.device import async_entity_id_to_device_id
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import selector
+from homeassistant.helpers.device import async_entity_id_to_device_id
 
+from .calculations import default_base_hold_seconds_with_floor
 from .const import (
-    CONF_BASE_HOLD_SECONDS,
     CONF_ACTIVE_STATE,
+    CONF_BASE_HOLD_SECONDS,
+    CONF_FLAP_GAP_SECONDS,
     CONF_FREE_FLAPS,
     CONF_HOLD_FACTOR,
     CONF_INPUT_ENTITY,
     CONF_MAX_HOLD_SECONDS,
     CONF_MIN_BASE_HOLD_SECONDS,
     CONF_MIN_ON_SECONDS,
-    CONF_FLAP_GAP_SECONDS,
     CONF_WINDOW_SECONDS,
+    DEFAULT_FLAP_GAP_SECONDS,
     DEFAULT_MAX_HOLD_SECONDS,
     DEFAULT_MIN_BASE_HOLD_SECONDS,
-    DEFAULT_FLAP_GAP_SECONDS,
     DOMAIN,
 )
-from .calculations import default_base_hold_seconds_with_floor
 
 SECTION_FLAP_DETECTION = "flap_detection"
 SECTION_HOLD_BEHAVIOR = "hold_behavior"
@@ -65,8 +65,14 @@ DEFAULTED_CONFIG_KEYS = (
 
 
 def _current_data(config_entry: config_entries.ConfigEntry) -> dict[str, Any]:
-    """Return the current config-entry options."""
-    return dict(config_entry.options)
+    """Return config-entry data with any options overlaid.
+
+    Home Assistant stores the original setup values in config_entry.data.
+    Later edits from the Options UI are stored in config_entry.options.
+
+    By merging them, the options form can show the current effective settings.
+    """
+    return {**config_entry.data, **config_entry.options}
 
 
 def _build_schema(current: dict[str, Any] | None = None) -> vol.Schema:
@@ -80,27 +86,30 @@ def _build_schema(current: dict[str, Any] | None = None) -> vol.Schema:
     input_entity_key = vol.Required(CONF_INPUT_ENTITY)
     if CONF_INPUT_ENTITY in current:
         input_entity_key = vol.Required(
-            CONF_INPUT_ENTITY, default=current[CONF_INPUT_ENTITY])
+            CONF_INPUT_ENTITY,
+            default=current[CONF_INPUT_ENTITY],
+        )
 
     def optional_key(key: str) -> vol.Optional:
-        if key in current:
-            return vol.Optional(key, default=current[key])
+        """Return an optional schema key, with a default only when one exists.
+
+        Do not set None or an empty string as the schema default. Those are
+        treated as "no override" values and should be omitted instead.
+        """
+        value = current.get(key)
+
+        if value not in (None, ""):
+            return vol.Optional(key, default=value)
 
         return vol.Optional(key)
 
-    def optional_int(*, min_value: int) -> vol.Schema:
-        return vol.Any(
-            None,
-            "",
-            vol.All(vol.Coerce(int), vol.Range(min=min_value)),
-        )
+    def int_value(*, min_value: int) -> vol.All:
+        """Return a frontend-safe integer validator."""
+        return vol.All(vol.Coerce(int), vol.Range(min=min_value))
 
-    def optional_float(*, min_value: float) -> vol.Schema:
-        return vol.Any(
-            None,
-            "",
-            vol.All(vol.Coerce(float), vol.Range(min=min_value)),
-        )
+    def float_value(*, min_value: float) -> vol.All:
+        """Return a frontend-safe float validator."""
+        return vol.All(vol.Coerce(float), vol.Range(min=min_value))
 
     base_hold_key = optional_key(CONF_BASE_HOLD_SECONDS)
     window_key = optional_key(CONF_WINDOW_SECONDS)
@@ -117,11 +126,11 @@ def _build_schema(current: dict[str, Any] | None = None) -> vol.Schema:
             vol.Required(SECTION_FLAP_DETECTION): section(
                 vol.Schema(
                     {
-                        optional_key(CONF_FREE_FLAPS): optional_int(min_value=0),
+                        optional_key(CONF_FREE_FLAPS): int_value(min_value=0),
 
-                        optional_key(CONF_FLAP_GAP_SECONDS): optional_int(min_value=1),
+                        optional_key(CONF_FLAP_GAP_SECONDS): int_value(min_value=1),
 
-                        window_key: optional_int(min_value=1),
+                        window_key: int_value(min_value=1),
                     }
                 ),
                 {"collapsed": True},
@@ -130,17 +139,17 @@ def _build_schema(current: dict[str, Any] | None = None) -> vol.Schema:
             vol.Required(SECTION_HOLD_BEHAVIOR): section(
                 vol.Schema(
                     {
-                        base_hold_key: optional_int(min_value=1),
+                        base_hold_key: int_value(min_value=1),
 
-                        optional_key(CONF_MIN_BASE_HOLD_SECONDS): optional_int(
+                        optional_key(CONF_MIN_BASE_HOLD_SECONDS): int_value(
                             min_value=1,
                         ),
 
-                        optional_key(CONF_HOLD_FACTOR): optional_float(min_value=1.0),
+                        optional_key(CONF_HOLD_FACTOR): float_value(min_value=1.0),
 
-                        optional_key(CONF_MAX_HOLD_SECONDS): optional_int(min_value=1),
+                        optional_key(CONF_MAX_HOLD_SECONDS): int_value(min_value=1),
 
-                        optional_key(CONF_MIN_ON_SECONDS): optional_int(min_value=0),
+                        optional_key(CONF_MIN_ON_SECONDS): int_value(min_value=0),
                     }
                 ),
                 {"collapsed": True},
@@ -196,7 +205,8 @@ def _prepare_input(hass: HomeAssistant, user_input: dict[str, Any]) -> dict[str,
     except vol.Invalid:
         errors[CONF_INPUT_ENTITY] = "invalid_input_entity"
     else:
-        user_input[CONF_DEVICE_ID] = async_entity_id_to_device_id(hass, entity_id)
+        user_input[CONF_DEVICE_ID] = async_entity_id_to_device_id(
+            hass, entity_id)
 
     active_state = user_input.get(CONF_ACTIVE_STATE)
     if isinstance(active_state, str) and active_state.strip():
@@ -209,11 +219,13 @@ def _prepare_input(hass: HomeAssistant, user_input: dict[str, Any]) -> dict[str,
         CONF_FLAP_GAP_SECONDS,
         DEFAULT_FLAP_GAP_SECONDS,
     )
+
     min_base_hold_seconds = _override_or_default(
         user_input,
         CONF_MIN_BASE_HOLD_SECONDS,
         DEFAULT_MIN_BASE_HOLD_SECONDS,
     )
+
     base = user_input.get(CONF_BASE_HOLD_SECONDS)
     if base in (None, ""):
         base = default_base_hold_seconds_with_floor(
@@ -232,7 +244,8 @@ def _prepare_input(hass: HomeAssistant, user_input: dict[str, Any]) -> dict[str,
 
     if not errors:
         user_input[CONF_NAME] = _antiflap_name(
-            _input_entity_name(hass, entity_id))
+            _input_entity_name(hass, entity_id),
+        )
 
     return errors
 
@@ -240,8 +253,8 @@ def _prepare_input(hass: HomeAssistant, user_input: dict[str, Any]) -> dict[str,
 def _override_or_default(
     user_input: dict[str, Any],
     key: str,
-    default: int | float | None,
-) -> int | float | None:
+    default: int | float,
+) -> int | float:
     """Return a submitted override, or the runtime default for blank values."""
     value = user_input.get(key)
 
@@ -291,7 +304,6 @@ class AntiflapConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     @staticmethod
-    @callback
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
     ) -> AntiflapOptionsFlow:
@@ -326,7 +338,8 @@ class AntiflapOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="init",
             data_schema=_build_schema(
-                current if user_input is None else user_input),
+                current if user_input is None else user_input,
+            ),
             errors=errors,
             last_step=True,
         )
