@@ -163,7 +163,8 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         ):
             self._active_state = configured_active_state.strip()
         else:
-            self._active_state = default_active_state(hass, self._input_entity_id)
+            self._active_state = default_active_state(
+                hass, self._input_entity_id)
 
         self._free_flaps: int = data.get(CONF_FREE_FLAPS, DEFAULT_FREE_FLAPS)
         self._flap_gap_seconds: int = data.get(
@@ -181,7 +182,8 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
                 self._min_base_hold_seconds,
             )
         self._base_hold_seconds: int = base_hold_seconds
-        self._hold_factor: float = data.get(CONF_HOLD_FACTOR, DEFAULT_HOLD_FACTOR)
+        self._hold_factor: float = data.get(
+            CONF_HOLD_FACTOR, DEFAULT_HOLD_FACTOR)
         self._max_hold_seconds: int = data.get(
             CONF_MAX_HOLD_SECONDS,
             DEFAULT_MAX_HOLD_SECONDS,
@@ -619,16 +621,19 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
     def _start_hold_if_needed(self, now: datetime) -> None:
         """Calculate and store a new hold window after active turns false."""
         self._purge_old_flap_timestamps()
+        self._clear_expired_hold(now)
 
         flap_timestamp_count = len(self._recent_flap_timestamps())
         flap_count = self._flap_count_from_flap_timestamp_count(
-            flap_timestamp_count)
-        self._hold_seconds = self._hold_seconds_from_flap_count(flap_count)
+            flap_timestamp_count
+        )
+        proposed_hold_seconds = self._hold_seconds_from_flap_count(flap_count)
 
-        if self._hold_seconds > 0:
-            self._hold_until = now + timedelta(seconds=self._hold_seconds)
-        else:
-            self._hold_until = None
+        self._hold_until, self._hold_seconds = _choose_hold_window(
+            self._hold_until,
+            proposed_hold_seconds,
+            now,
+        )
 
     def _recent_flap_timestamps(self) -> list[datetime]:
         """Return flap timestamps still inside the rolling window."""
@@ -720,6 +725,34 @@ class AntiflapBinarySensor(BinarySensorEntity, RestoreEntity):
         now = now or _utcnow()
         if self._min_on_until <= now:
             self._min_on_until = None
+
+
+def _choose_hold_window(
+    current_hold_until: datetime | None,
+    proposed_hold_seconds: int,
+    now: datetime,
+) -> tuple[datetime | None, int]:
+    """Choose the hold window that preserves the longer active hold.
+
+    If an existing hold window is still active and the new proposed window is
+    shorter or omitted, preserve the existing hold instead of shortening it.
+    """
+    active_existing_hold = (
+        current_hold_until is not None and current_hold_until > now
+    )
+    if active_existing_hold:
+        proposed_hold_until = (
+            None
+            if proposed_hold_seconds <= 0
+            else now + timedelta(seconds=proposed_hold_seconds)
+        )
+        if proposed_hold_until is None or proposed_hold_until <= current_hold_until:
+            return current_hold_until, ceil((current_hold_until - now).total_seconds())
+
+    if proposed_hold_seconds <= 0:
+        return None, 0
+
+    return now + timedelta(seconds=proposed_hold_seconds), proposed_hold_seconds
 
 
 def _antiflap_name(name: str) -> str:
